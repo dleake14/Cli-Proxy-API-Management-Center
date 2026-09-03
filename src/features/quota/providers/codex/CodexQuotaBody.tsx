@@ -31,17 +31,32 @@ const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): str
   return classes.codexPlanValue;
 };
 
+const isHiddenCodexWindow = (window: CodexQuotaState['windows'][number]): boolean => {
+  const searchableText = [window.id, window.label, ...Object.values(window.labelParams ?? {})]
+    .join(' ')
+    .toLowerCase();
+  return searchableText.includes('spark');
+};
+
 export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaState>) {
   const { t, i18n } = useTranslation();
   const now = useNow();
   const locale = i18n.resolvedLanguage;
+  const windows = quota.windows;
+  const visibleWindows = useMemo(
+    () => windows.filter((window) => !isHiddenCodexWindow(window)),
+    [windows]
+  );
   // Windows and reset credits compete for the same emphasis, but only during
   // the final hour before the reset or expiry.
   const soonestRowId = useMemo(
-    () => pickUrgentRowId(collectQuotaRowInstants('codex', quota), now),
-    [quota, now]
+    () =>
+      pickUrgentRowId(
+        collectQuotaRowInstants('codex', { ...quota, windows: visibleWindows }),
+        now
+      ),
+    [quota, visibleWindows, now]
   );
-  const windows = quota.windows ?? [];
   const planType = quota.planType ?? null;
   const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
   const rateLimitResetCreditsAvailableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
@@ -152,10 +167,10 @@ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaStat
           })}
         </div>
       ) : null}
-      {windows.length === 0 ? (
+      {(windows?.length ?? 0) === 0 ? (
         <div className={classes.quotaMessage}>{t('codex_quota.empty_windows')}</div>
       ) : (
-        windows.map((window, index) => {
+        visibleWindows.map((window, index) => {
           const used = window.usedPercent;
           const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
           const remaining =

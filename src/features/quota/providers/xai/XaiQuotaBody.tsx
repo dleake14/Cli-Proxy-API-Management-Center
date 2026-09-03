@@ -1,12 +1,12 @@
 /**
  * xAI 额度渲染体：套餐 chip 行（SuperGrok Heavy / 付费档=金卡）、
- * 周/月账单水位条、按量付费余额。
+ * 周账单水位条、按量付费余额；隐藏 Imagine 与月度 credits 行以保持卡片紧凑。
  */
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { XaiBillingSummary, XaiQuotaState } from '@/types';
-import { buildResetDisplay, formatQuotaResetTime, parseIsoToMs } from '@/utils/quota';
+import { buildResetDisplay, formatQuotaResetTime } from '@/utils/quota';
 import { useNow } from '@/hooks/useNow';
 import { QuotaMeter } from '../../components/QuotaMeter';
 import { QuotaResetLabel } from '../../components/QuotaResetLabel';
@@ -19,17 +19,6 @@ const formatUsdFromCents = (cents: number | null): string => {
     style: 'currency',
     currency: 'USD',
   }).format(cents / 100);
-};
-
-const formatXaiRemainingAmount = (billing: XaiBillingSummary): string => {
-  const remainingCents =
-    billing.monthlyLimitCents !== null && billing.includedUsedCents !== null
-      ? Math.max(0, billing.monthlyLimitCents - billing.includedUsedCents)
-      : null;
-  const remaining = formatUsdFromCents(remainingCents);
-  const limit = formatUsdFromCents(billing.monthlyLimitCents);
-  if (billing.monthlyLimitCents === null) return remaining;
-  return `${remaining} / ${limit}`;
 };
 
 const formatXaiOnDemandAmount = (billing: XaiBillingSummary): string => {
@@ -63,6 +52,11 @@ const resolveXaiPlan = (
   return null;
 };
 
+const isHiddenXaiProductUsage = (product: string): boolean => {
+  const normalized = product.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  return normalized.includes('imagine') || normalized.includes('monthly credit');
+};
+
 export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) {
   const { t, i18n } = useTranslation();
   // Ahead of the early return below — hooks cannot be conditional.
@@ -92,20 +86,8 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
     );
   }
 
-  const clampedUsed =
-    billing.usedPercent === null ? null : Math.max(0, Math.min(100, billing.usedPercent));
-  const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
-  const percentLabel = formatXaiPercent(remaining);
-  const amountLabel = formatXaiRemainingAmount(billing);
-  const resetLabel = formatQuotaResetTime(billing.billingPeriodEnd);
-  // The monthly row is a billing cycle, so it carries no resetAtMs (that field
-  // is derived from periodEnd, the weekly quota window). Parse for the
-  // countdown; the summary keeps the two periods deliberately distinct.
-  const monthlyResetDisplay = buildResetDisplay(
-    resetLabel,
-    parseIsoToMs(billing.billingPeriodEnd),
-    now,
-    locale
+  const visibleProductUsage = billing.productUsage.filter(
+    (item) => !isHiddenXaiProductUsage(item.product)
   );
   const onDemandCap = billing.onDemandCapCents ?? 0;
   const clampedOnDemandUsed =
@@ -132,10 +114,6 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
   const hasWeeklyData =
     billing.periodType === 'weekly' &&
     (weeklyUsed !== null || Boolean(billing.periodEnd) || billing.productUsage.length > 0);
-  const hasMonthlyData =
-    billing.monthlyLimitCents !== null ||
-    billing.usedCents !== null ||
-    Boolean(billing.billingPeriodEnd);
 
   return (
     <>
@@ -168,7 +146,7 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
           <QuotaMeter percent={weeklyRemaining} classes={classes} index={0} />
         </div>
       )}
-      {billing.productUsage.map((item, index) => {
+      {visibleProductUsage.map((item, index) => {
         const used =
           item.usagePercent === null ? null : Math.max(0, Math.min(100, item.usagePercent));
         const remainingPercent = used === null ? null : Math.max(0, Math.min(100, 100 - used));
@@ -202,32 +180,13 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
           <QuotaMeter
             percent={onDemandRemaining}
             classes={classes}
-            index={billing.productUsage.length + 1}
+            index={visibleProductUsage.length + 1}
           />
         </div>
       ) : (
         <div className={classes.codexPlan}>
           <span className={classes.codexPlanLabel}>{t('xai_quota.pay_as_you_go_label')}</span>
           <span className={classes.codexPlanValue}>{t('xai_quota.pay_as_you_go_disabled')}</span>
-        </div>
-      )}
-      {hasMonthlyData && (
-        <div className={classes.quotaRow}>
-          <div className={classes.quotaRowHeader}>
-            <span className={classes.quotaModel}>{t('xai_quota.monthly_credits')}</span>
-            <div className={classes.quotaMeta}>
-              <span className={classes.quotaPercent}>{percentLabel}</span>
-              <span className={classes.quotaAmount}>{amountLabel}</span>
-              {monthlyResetDisplay && (
-                <QuotaResetLabel display={monthlyResetDisplay} classes={classes} />
-              )}
-            </div>
-          </div>
-          <QuotaMeter
-            percent={remaining}
-            classes={classes}
-            index={billing.productUsage.length + 2}
-          />
         </div>
       )}
     </>

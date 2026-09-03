@@ -11,13 +11,21 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import i18n from '@/i18n';
+import { AntigravityQuotaBody } from '@/features/quota/providers/antigravity/AntigravityQuotaBody';
 import { CodexQuotaBody } from '@/features/quota/providers/codex/CodexQuotaBody';
 import { ClaudeQuotaBody } from '@/features/quota/providers/claude/ClaudeQuotaBody';
 import { KimiQuotaBody } from '@/features/quota/providers/kimi/KimiQuotaBody';
+import { XaiQuotaBody } from '@/features/quota/providers/xai/XaiQuotaBody';
 import { QUOTA_CLASS_KEYS, bindQuotaClasses } from '@/features/quota/types';
 import { formatInstantShort } from '@/utils/quota';
 import { DAY_MS, HOUR_MS } from '@/utils/time/durations';
-import type { ClaudeQuotaState, CodexQuotaState, KimiQuotaState } from '@/types';
+import type {
+  AntigravityQuotaState,
+  ClaudeQuotaState,
+  CodexQuotaState,
+  KimiQuotaState,
+  XaiQuotaState,
+} from '@/types';
 
 const classes = bindQuotaClasses(
   Object.fromEntries(QUOTA_CLASS_KEYS.map((key) => [key, key])),
@@ -138,6 +146,31 @@ describe('CodexQuotaBody', () => {
     expect(markup).toContain('08-02 18:00');
     expect(markup).not.toContain('quotaResetRelative');
   });
+
+  test('hides Spark windows while keeping the primary Codex window visible', () => {
+    const markup = renderToStaticMarkup(
+      createElement(CodexQuotaBody, {
+        quota: {
+          ...quota,
+          windows: [
+            ...quota.windows,
+            {
+              id: 'gpt-5-3-codex-spark-weekly-0',
+              label: 'GPT-5.3-Codex-Spark weekly limit',
+              usedPercent: 0,
+              resetLabel: '08-02 19:00',
+              resetAtMs: now + 4 * HOUR_MS,
+              periodHours: 168,
+            },
+          ],
+        },
+        classes,
+      })
+    );
+
+    expect(markup).toContain('5-hour limit');
+    expect(markup).not.toContain('GPT-5.3-Codex-Spark');
+  });
 });
 
 describe('KimiQuotaBody', () => {
@@ -195,5 +228,75 @@ describe('ClaudeQuotaBody', () => {
     expect(markup).toContain('08-06 04:00');
     expect(markup).toMatch(/2 hours/);
     expect(markup).toMatch(/4 days/);
+  });
+});
+
+describe('AntigravityQuotaBody', () => {
+  test('keeps Gemini rows and hides the Claude and GPT group', () => {
+    const quota: AntigravityQuotaState = {
+      status: 'success',
+      groups: [
+        {
+          id: 'gemini',
+          label: 'Gemini models',
+          buckets: [
+            {
+              id: 'gemini-weekly',
+              label: 'Weekly limit',
+              remainingFraction: 0.8,
+            },
+          ],
+        },
+        {
+          id: 'claude-gpt',
+          label: 'Claude and GPT models',
+          buckets: [
+            {
+              id: 'claude-gpt-weekly',
+              label: 'Weekly limit',
+              remainingFraction: 0.7,
+            },
+          ],
+        },
+      ],
+      subscription: null,
+    };
+    const markup = renderToStaticMarkup(createElement(AntigravityQuotaBody, { quota, classes }));
+
+    expect(markup).toContain('Gemini models');
+    expect(markup).not.toContain('Claude and GPT models');
+  });
+});
+
+describe('XaiQuotaBody', () => {
+  test('hides Imagine product usage and monthly credits', () => {
+    const quota: XaiQuotaState = {
+      status: 'success',
+      billing: {
+        mode: 'billing',
+        periodType: 'weekly',
+        usagePercent: 25,
+        periodStart: '2030-08-01T00:00:00Z',
+        periodEnd: '2030-08-08T00:00:00Z',
+        productUsage: [
+          { product: 'Grok', usagePercent: 25 },
+          { product: 'Grok Imagine', usagePercent: 40 },
+        ],
+        monthlyLimitCents: 15000,
+        usedCents: 2500,
+        includedUsedCents: 2500,
+        onDemandCapCents: 10000,
+        onDemandUsedCents: 0,
+        onDemandUsedPercent: 0,
+        billingPeriodStart: '2030-08-01T00:00:00Z',
+        billingPeriodEnd: '2030-09-01T00:00:00Z',
+        usedPercent: 16.67,
+      },
+    };
+    const markup = renderToStaticMarkup(createElement(XaiQuotaBody, { quota, classes }));
+
+    expect(markup).toContain('Grok usage');
+    expect(markup).not.toContain('Grok Imagine usage');
+    expect(markup).not.toContain('Monthly credits');
   });
 });

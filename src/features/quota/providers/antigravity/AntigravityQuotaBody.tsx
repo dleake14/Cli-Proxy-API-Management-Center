@@ -69,6 +69,11 @@ const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
 const normalizeAntigravityQuotaText = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, ' ');
 
+const isHiddenAntigravityGroup = (label: string): boolean => {
+  const normalized = normalizeAntigravityQuotaText(label);
+  return normalized.includes('claude') && normalized.includes('gpt');
+};
+
 const translateAntigravityQuotaLabel = (
   value: string,
   keys: Map<string, string>,
@@ -110,19 +115,23 @@ const getAntigravityPlanLabel = (
 
 export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<AntigravityQuotaState>) {
   const { t } = useTranslation();
-  const groups = quota.groups ?? [];
+  const groups = quota.groups;
+  const visibleGroups = useMemo(
+    () => groups.filter((group) => !isHiddenAntigravityGroup(group.label)),
+    [groups]
+  );
   const planLabel = getAntigravityPlanLabel(quota.subscription, t);
   const normalizedPlan = quota.subscription?.plan?.toLowerCase() ?? '';
   const isPremiumPlan = normalizedPlan === 'ultra' || normalizedPlan === 'ultra-lite';
   const serverTimeOffsetMs = quota.serverTimeOffsetMs ?? 0;
   const resetTimestamps = useMemo(
     () =>
-      (quota.groups ?? []).flatMap((group) =>
+      visibleGroups.flatMap((group) =>
         group.buckets
           .map((bucket) => (bucket.resetTime ? new Date(bucket.resetTime).getTime() : Number.NaN))
           .filter(Number.isFinite)
       ),
-    [quota.groups]
+    [visibleGroups]
   );
   // 首屏直接显示准确文案；后续 effect 会在最近的分钟边界更新并重新排程。
   const [nowMs, setNowMs] = useState(() => Date.now() + serverTimeOffsetMs);
@@ -148,8 +157,12 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
   // Ranked against this provider's own server-corrected clock rather than the
   // shared one, so the final-hour warning and the countdown always agree.
   const soonestRowId = useMemo(
-    () => pickUrgentRowId(collectQuotaRowInstants('antigravity', quota), nowMs),
-    [quota, nowMs]
+    () =>
+      pickUrgentRowId(
+        collectQuotaRowInstants('antigravity', { ...quota, groups: visibleGroups }),
+        nowMs
+      ),
+    [quota, visibleGroups, nowMs]
   );
 
   return (
@@ -164,10 +177,10 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
           </span>
         </div>
       )}
-      {groups.length === 0 ? (
+      {(groups?.length ?? 0) === 0 ? (
         <div className={classes.quotaMessage}>{t('antigravity_quota.empty_models')}</div>
       ) : (
-        groups.map((group) => {
+        visibleGroups.map((group) => {
           const groupLabel = translateAntigravityQuotaLabel(
             group.label,
             ANTIGRAVITY_GROUP_LABEL_KEYS,
