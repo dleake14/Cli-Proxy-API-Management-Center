@@ -21,6 +21,7 @@ import { useRevealGroup } from '@/hooks/motion';
 import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
+import { getTypeLabel } from '@/features/authFiles/constants';
 import { QuotaHeader } from './components/QuotaHeader';
 import { QuotaCard } from './components/QuotaCard';
 import { QuotaTimeline } from './components/QuotaTimeline';
@@ -33,6 +34,7 @@ import {
   type QuotaTabId,
 } from './constants';
 import {
+  buildQuotaCardLabels,
   buildTabCounts,
   classifyQuotaFiles,
   filterEntriesByTab,
@@ -51,11 +53,10 @@ import styles from './QuotaPage.module.scss';
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
 const SKELETON_CARD_COUNT = 6;
 
-/**
- * 时间线泳道名 = 卡片标题，两者必须一致。卡片显示的就是文件名，所以这里是恒等。
- * 提到模块级是为了引用稳定 —— 它进了泳道 memo 的依赖数组。
- */
-const displayNameFor = (name: string) => name;
+/* ---------- 卡片显示名 ----------
+ * 卡头/时间线泳道都用提供商短品牌名（Codex / Claude / Gemini / Grok / Kimi），
+ * 原始凭证文件名只留在 hover tooltip —— 超长 JSON 文件名在卡头很难读。
+ * 泳道名与卡头共用同一张表（buildQuotaCardLabels），两处必然一致。 */
 
 export function QuotaPage() {
   const { t } = useTranslation();
@@ -104,6 +105,7 @@ export function QuotaPage() {
   const claudeQuota = useQuotaStore((state) => state.claudeQuota);
   const codexQuota = useQuotaStore((state) => state.codexQuota);
   const kimiQuota = useQuotaStore((state) => state.kimiQuota);
+  const ollamaQuota = useQuotaStore((state) => state.ollamaQuota);
   const xaiQuota = useQuotaStore((state) => state.xaiQuota);
 
   const quotaByType = useMemo<Record<QuotaProviderType, Record<string, QuotaCardState>>>(
@@ -113,9 +115,10 @@ export function QuotaPage() {
         claude: claudeQuota,
         codex: codexQuota,
         kimi: kimiQuota,
+        ollama: ollamaQuota,
         xai: xaiQuota,
       }) as unknown as Record<QuotaProviderType, Record<string, QuotaCardState>>,
-    [antigravityQuota, claudeQuota, codexQuota, kimiQuota, xaiQuota]
+    [antigravityQuota, claudeQuota, codexQuota, kimiQuota, ollamaQuota, xaiQuota]
   );
 
   const getQuota = useCallback(
@@ -133,6 +136,17 @@ export function QuotaPage() {
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
   const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
   const filteredEntries = useMemo(() => filterEntriesByTab(entries, tab), [entries, tab]);
+
+  // 卡头/泳道显示名表（key = 文件名）。t 变化（切语言）时重建。
+  const cardLabels = useMemo(
+    () => buildQuotaCardLabels(entries, (type) => getTypeLabel(t, type)),
+    [entries, t]
+  );
+  // 泳道名 = 卡头标题，恒等查询同一张表（依赖稳定，进泳道 memo 依赖数组）。
+  const displayNameFor = useCallback(
+    (name: string) => cardLabels.get(name) ?? name,
+    [cardLabels]
+  );
 
   const resolveNextRecovery = useCallback(
     (entry: QuotaFileEntry) => nextRecoveryMs(entry.type, getQuota(entry), sortNow),
@@ -202,7 +216,7 @@ export function QuotaPage() {
   /* ---------- 加载与操作 ---------- */
 
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
-  const { resettingQuotaName, refreshQuota, resetQuota } = useQuotaActions(disableControls);
+  const { refreshQuota } = useQuotaActions(disableControls);
 
   const pendingRefreshRef = useRef(false);
   const prevLoadingRef = useRef(loading);
@@ -321,12 +335,11 @@ export function QuotaPage() {
                 key={`${entry.type}:${entry.file.name}`}
                 entry={entry}
                 quota={getQuota(entry)}
+                displayName={cardLabels.get(entry.file.name) ?? entry.file.name}
                 resolvedTheme={resolvedTheme}
                 canRefresh={canUseActions && !entry.file.disabled}
-                resetting={resettingQuotaName === entry.file.name}
                 entranceDelayMs={cardEntranceDelay(index)}
                 onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
               />
             ))}
           </div>

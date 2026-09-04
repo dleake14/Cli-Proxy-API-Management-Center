@@ -310,6 +310,30 @@ export interface KimiQuotaState {
   errorStatus?: number;
 }
 
+/**
+ * Ollama 额度行。used/limit 都是百分比（limit 恒为 100），因为 Ollama Cloud
+ * 的 /api/usage 直接下发归一化用量分数，而不是原始计数。
+ */
+export interface OllamaQuotaRow {
+  id: string;
+  label?: string;
+  /** 已用百分比 0..100。 */
+  used: number;
+  /** 额度上限百分比，恒为 100；保留字段以复用其余提供商的 remaining 计算。 */
+  limit: number;
+  /** Reset instant in epoch ms; null when the source reported no upcoming reset. */
+  resetAtMs?: number | null;
+  /** Window length in hours (session 5h / weekly 168h). */
+  periodHours?: number | null;
+}
+
+export interface OllamaQuotaState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  rows: OllamaQuotaRow[];
+  error?: string;
+  errorStatus?: number;
+}
+
 // xAI/Grok API payload types
 export interface XaiBillingCent {
   val?: number | string;

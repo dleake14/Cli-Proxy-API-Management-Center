@@ -466,14 +466,15 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     };
   }
 
-  if (provider === 'kimi') {
+  if (provider === 'kimi' || provider === 'ollama') {
     const rows = ((quota as { rows?: KimiRowLike[] }).rows ?? []).filter(
       (row) => typeof row.resetAtMs === 'number'
     );
     const chosen = pickLaneWindow(rows, maxPeriodHours);
     if (!chosen) return empty;
 
-    // Kimi reports raw counts; remaining is derived.
+    // Kimi reports raw counts; remaining is derived. Ollama rows arrive as
+    // percent-of-100, which the same expression already resolves correctly.
     const remainingOf = (row: KimiRowLike) =>
       row.limit > 0 ? clampPercent(Math.round(((row.limit - row.used) / row.limit) * 100)) : null;
 

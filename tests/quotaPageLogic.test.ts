@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { QUOTA_PAGE_SIZE, QUOTA_TAB_ORDER } from '@/features/quota/constants';
 import {
+  buildQuotaCardLabels,
   buildTabCounts,
   classifyQuotaFiles,
   filterEntriesByTab,
@@ -43,7 +44,7 @@ describe('classifyQuotaFiles', () => {
     const entries = classifyQuotaFiles(FILES);
     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
-    // 5 supported credentials + the virtual Ollama card.
+    // 5 supported credentials + virtual Ollama card.
     expect(entries).toHaveLength(6);
   });
 
@@ -123,9 +124,10 @@ describe('filterEntriesByTab', () => {
 });
 
 describe('isQuotaRefreshDisabled', () => {
-  test('blocks a single-card refresh while the same quota is resetting', () => {
-    expect(isQuotaRefreshDisabled(true, false, true)).toBe(true);
-    expect(isQuotaRefreshDisabled(true, false, false)).toBe(false);
+  test('blocks a single-card refresh while unavailable or loading', () => {
+    expect(isQuotaRefreshDisabled(false, false)).toBe(true);
+    expect(isQuotaRefreshDisabled(true, true)).toBe(true);
+    expect(isQuotaRefreshDisabled(true, false)).toBe(false);
   });
 });
 
@@ -230,5 +232,50 @@ describe('sortQuotaEntries', () => {
     const last = entries[entries.length - 1].file.name;
     const sorted = sortQuotaEntries(entries, 'soonest', resolver({ [last]: 1 }));
     expect(paginate(sorted, 1, 2).pageItems[0].file.name).toBe(last);
+  });
+});
+
+describe('buildQuotaCardLabels', () => {
+  const labelFor = (type: string) =>
+    ({ codex: 'Codex', claude: 'Claude', xai: 'Grok', antigravity: 'Gemini', ollama: 'Ollama' })[
+      type
+    ] ?? type;
+
+  test('uses the provider brand name when a provider has a single card', () => {
+    const entries = classifyQuotaFiles([
+      file('codex-9ca96e91-dleake14@gmail.com-prolite.json', 'codex'),
+      file('antigravity-dleake14@gmail.com.json', 'antigravity'),
+    ]);
+    const labels = buildQuotaCardLabels(entries, labelFor);
+    expect(labels.get('codex-9ca96e91-dleake14@gmail.com-prolite.json')).toBe('Codex');
+    expect(labels.get('antigravity-dleake14@gmail.com.json')).toBe('Gemini');
+  });
+
+  test('keeps the runtime-only virtual card name as-is', () => {
+    const entries = classifyQuotaFiles([]);
+    const labels = buildQuotaCardLabels(entries, labelFor);
+    expect(labels.get('Ollama Cloud')).toBe('Ollama Cloud');
+  });
+
+  test('appends an account hint when one provider has multiple cards', () => {
+    const entries = classifyQuotaFiles([
+      file('codex-a@gmail.com.json', 'codex', { email: 'a@gmail.com' }),
+      file('codex-b@gmail.com.json', 'codex', { email: 'b@gmail.com' }),
+    ]);
+    const labels = buildQuotaCardLabels(entries, labelFor);
+    expect(labels.get('codex-a@gmail.com.json')).toBe('Codex · a@gmail.com');
+    expect(labels.get('codex-b@gmail.com.json')).toBe('Codex · b@gmail.com');
+  });
+
+  test('numbering keeps duplicate-account cards distinguishable', () => {
+    const entries = classifyQuotaFiles([
+      file('codex-1.json', 'codex', { email: 'a@gmail.com' }),
+      file('codex-2.json', 'codex', { email: 'a@gmail.com' }),
+      file('codex-3.json', 'codex'),
+    ]);
+    const labels = buildQuotaCardLabels(entries, labelFor);
+    expect(labels.get('codex-1.json')).toBe('Codex · a@gmail.com');
+    expect(labels.get('codex-2.json')).toBe('Codex · a@gmail.com #2');
+    expect(labels.get('codex-3.json')).toBe('Codex · codex-3');
   });
 });

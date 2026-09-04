@@ -6,6 +6,10 @@ import type { TypeColorSet } from '@/types';
 
 // Theme colors for type badges — 与 authFiles/constants.ts 保持同步
 export const TYPE_COLORS: Record<string, TypeColorSet> = {
+  ollama: {
+    light: { bg: '#e8eef4', text: '#2f5f8f' },
+    dark: { bg: '#1d3a55', text: '#9dc4e8' },
+  },
   qwen: {
     light: { bg: '#ede5fd', text: '#5530c7' },
     dark: { bg: '#36208a', text: '#b5a3f0' },
@@ -136,6 +140,18 @@ export const CODEX_REQUEST_HEADERS = {
 
 // Kimi API configuration
 export const KIMI_USAGE_URL = 'https://api.kimi.com/coding/v1/usages';
+
+/**
+ * Ollama 额度来源。
+ *
+ * Ollama 不是 CLIProxyAPI 的原生提供商，所以额度不来自后端 `/api-call`，而是本机
+ * Usage Ledger 服务（它代持 OLLAMA_API_KEY 并打 https://ollama.com/api/usage）。
+ * 面板只需该服务的 CORS JSON 端点；密钥不出现在构建产物里。
+ * 构建时可用 VITE_OLLAMA_USAGE_URL 覆盖。
+ */
+export const OLLAMA_USAGE_ENDPOINT: string =
+  (import.meta.env?.VITE_OLLAMA_USAGE_URL as string | undefined)?.trim() ||
+  'http://127.0.0.1:47193/ollama-usage';
 
 export const KIMI_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',

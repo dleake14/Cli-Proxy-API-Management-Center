@@ -1,5 +1,5 @@
 /**
- * 额度卡片：头部（提供商图标 + mono 文件名）+ 四态 body + 动作 footer。
+ * 额度卡片：头部（提供商图标 + 短品牌显示名，hover 显示原始文件名）+ 四态 body + 动作 footer。
  *
  * - idle：整个 body 是一个点击加载按钮（上游直连有速率考虑，不自动拉取）；
  * - loading：双幽灵行骨架（aria-busy，文字等价视觉隐藏）；
@@ -30,25 +30,24 @@ const quotaClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
 export type QuotaCardProps = {
   entry: QuotaFileEntry;
   quota?: QuotaCardState;
+  /** 卡头短显示名（如 Codex / Gemini）；缺省回退到原始文件名。 */
+  displayName?: string;
   resolvedTheme: ResolvedTheme;
   canRefresh: boolean;
-  resetting: boolean;
   /** 首屏级联入场延迟；null = 不入场（切 tab / 翻页 / 刷新新挂载的卡片）。 */
   entranceDelayMs?: number | null;
   onRefresh: () => void;
-  onReset: () => void;
 };
 
 export function QuotaCard(props: QuotaCardProps) {
   const {
     entry,
     quota,
+    displayName,
     resolvedTheme,
     canRefresh,
-    resetting,
     entranceDelayMs,
     onRefresh,
-    onReset,
   } = props;
   const { t } = useTranslation();
   const adapter = QUOTA_ADAPTERS[entry.type];
@@ -70,12 +69,6 @@ export function QuotaCard(props: QuotaCardProps) {
     quota?.errorStatus,
     quota?.error || t('common.unknown_error')
   );
-  const showReset =
-    status === 'success' &&
-    Boolean(adapter.resetQuota) &&
-    quota !== undefined &&
-    Boolean(adapter.canResetQuota?.(quota));
-
   return (
     <article
       className={`${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`}
@@ -98,7 +91,7 @@ export function QuotaCard(props: QuotaCardProps) {
           )}
         </span>
         <span className={styles.fileName} title={file.name}>
-          {file.name}
+          {displayName ?? file.name}
         </span>
       </header>
 
@@ -136,23 +129,11 @@ export function QuotaCard(props: QuotaCardProps) {
 
       {status !== 'idle' && (
         <footer className={styles.actionRow}>
-          {showReset && (
-            <button
-              type="button"
-              className={styles.actionPill}
-              onClick={onReset}
-              disabled={!canRefresh || loading || resetting}
-              title={t('codex_quota.reset_button')}
-            >
-              <IconRefreshCw size={13} className={resetting ? styles.spinning : undefined} />
-              {t('codex_quota.reset_button')}
-            </button>
-          )}
           <button
             type="button"
             className={styles.actionPill}
             onClick={onRefresh}
-            disabled={isQuotaRefreshDisabled(canRefresh, loading, resetting)}
+            disabled={isQuotaRefreshDisabled(canRefresh, loading)}
             title={t('auth_files.quota_refresh_hint')}
           >
             <IconRefreshCw size={13} className={loading ? styles.spinning : undefined} />

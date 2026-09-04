@@ -8,6 +8,7 @@ import type { RecentRequestBucket } from '@/utils/recentRequests';
 export type AuthFileType =
   | 'qwen'
   | 'kimi'
+  | 'ollama'
   | 'gemini'
   | 'aistudio'
   | 'claude'

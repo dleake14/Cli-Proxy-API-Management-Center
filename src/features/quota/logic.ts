@@ -8,6 +8,7 @@ import { ANTIGRAVITY_CONFIG } from './providers/antigravity/data';
 import { CLAUDE_CONFIG } from './providers/claude/data';
 import { CODEX_CONFIG } from './providers/codex/data';
 import { KIMI_CONFIG } from './providers/kimi/data';
+import { OLLAMA_CONFIG } from './providers/ollama/data';
 import { XAI_CONFIG } from './providers/xai/data';
 import type { QuotaProviderType } from './providers/types';
 import { QUOTA_TAB_ORDER, type QuotaSortMode, type QuotaTabId } from './constants';
@@ -17,7 +18,28 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
   claude: CLAUDE_CONFIG.filterFn,
   codex: CODEX_CONFIG.filterFn,
   kimi: KIMI_CONFIG.filterFn,
+  ollama: OLLAMA_CONFIG.filterFn,
   xai: XAI_CONFIG.filterFn,
+};
+
+/**
+ * Ollama 的占位条目。
+ *
+ * Ollama 不是 CLIProxyAPI 的原生 OAuth 提供商：auth-dir 里没有它的凭证文件，
+ * 后端也就永远不会把它列进 `/auth-files`。额度页又把每张卡绑在一个凭证文件上，
+ * 所以这里人工造一个条目，让 Ollama 以独立的「账户」出现在同一个网格里。
+ *
+ * `name` 就是卡头显示的文案，同时是额度缓存的键；`runtime_only` 让它不进删除/
+ * 停用流程（没有后端实体可操作）。
+ */
+export const OLLAMA_SYNTHETIC_FILE: AuthFileItem = {
+  name: 'Ollama Cloud',
+  provider: 'ollama',
+  type: 'ollama',
+  email: 'Ollama Cloud',
+  runtimeOnly: true,
+  disabled: false,
+  unavailable: false,
 };
 
 export interface QuotaFileEntry {
@@ -31,6 +53,9 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType 
 /**
  * 把文件列表归类为额度条目：不支持额度或已停用的文件被过滤，
  * 结果按 QUOTA_TAB_ORDER 分组排列（'全部' tab 的卡片顺序即由此决定）。
+ *
+ * 后端永远不列 Ollama（见 OLLAMA_SYNTHETIC_FILE），所以在这里补一条；
+ * 一旦真的出现 ollama 凭证，占位条就不再注入，避免双卡。
  */
 export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
   const groups = new Map<QuotaProviderType, QuotaFileEntry[]>(
@@ -41,6 +66,12 @@ export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
     if (!type) continue;
     groups.get(type)?.push({ file, type });
   }
+
+  const virtual: AuthFileItem[] = (groups.get('ollama')?.length ?? 0) === 0 ? [OLLAMA_SYNTHETIC_FILE] : [];
+  for (const file of virtual) {
+    groups.get('ollama')?.push({ file, type: 'ollama' });
+  }
+
   return QUOTA_TAB_ORDER.flatMap((type) => groups.get(type) ?? []);
 }
 
@@ -97,9 +128,57 @@ export function buildTabCounts(entries: QuotaFileEntry[]): Record<string, number
 
 export const isQuotaRefreshDisabled = (
   canRefresh: boolean,
-  loading: boolean,
-  resetting: boolean
-): boolean => !canRefresh || loading || resetting;
+  loading: boolean
+): boolean => !canRefresh || loading;
+
+/** 卡头/泳道账号区分后缀：优先邮箱，否则去扩展名的文件名。 */
+const accountHint = (file: AuthFileItem): string => {
+  const email = typeof file.email === 'string' ? file.email.trim() : '';
+  if (email) return email;
+  return file.name.replace(/\.json$/i, '');
+};
+
+/**
+ * 卡片显示名表（key = 文件名，后端 auth-dir 内文件名唯一）。
+ *
+ * 卡头不再展示原始凭证文件名（超长的 JSON 文件名很难读），改用提供商短品牌名
+ * （Codex / Claude / Gemini / Grok / Kimi…，由调用方传入的 labelFor 从 i18n 取）。
+ * 规则：
+ * - 运行时虚拟卡（如 Ollama Cloud）直接用 file.name，本身就是短文案；
+ * - 同一提供商只有一张卡 → 直接用类型标签；
+ * - 同一提供商有多张卡 → 追加账号区分（邮箱/文件名），同名再加序号避免歧义。
+ *
+ * 时间线泳道名与卡头共用这张表，保证两处一致。
+ */
+export function buildQuotaCardLabels(
+  entries: QuotaFileEntry[],
+  labelFor: (type: QuotaProviderType) => string
+): Map<string, string> {
+  const typeCounts = new Map<QuotaProviderType, number>();
+  for (const entry of entries) {
+    typeCounts.set(entry.type, (typeCounts.get(entry.type) ?? 0) + 1);
+  }
+
+  const labels = new Map<string, string>();
+  const seenAccounts = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.file.runtimeOnly) {
+      labels.set(entry.file.name, entry.file.name);
+      continue;
+    }
+    const label = labelFor(entry.type);
+    if ((typeCounts.get(entry.type) ?? 0) <= 1) {
+      labels.set(entry.file.name, label);
+      continue;
+    }
+    const account = accountHint(entry.file);
+    const dedupeKey = `${entry.type}:${account}`;
+    const seen = (seenAccounts.get(dedupeKey) ?? 0) + 1;
+    seenAccounts.set(dedupeKey, seen);
+    labels.set(entry.file.name, seen > 1 ? `${label} · ${account} #${seen}` : `${label} · ${account}`);
+  }
+  return labels;
+}
 
 export interface QuotaPagination<T> {
   pageItems: T[];
