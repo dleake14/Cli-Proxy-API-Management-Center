@@ -1,0 +1,16 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC quota provider surface change",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": ["validation.log", "diff.patch", "proof/quota-provider-surface.html"]
+  },
+  "scope": {
+    "must_cover": ["Codex", "Claude", "Grok", "Gemini", "Ollama", "Kimi", "fable", "rollback"]
+  },
+  "floors": {"min_words": 80, "min_words_per_covered_term": 1},
+  "forbidden_tokens": ["TODO", "TBD", "PLACEHOLDER", "OLLAMA_API_KEY="]
+}

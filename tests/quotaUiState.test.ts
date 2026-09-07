@@ -53,9 +53,9 @@ describe('quota ui state', () => {
 
   test('writing one preference preserves the other', () => {
     writeQuotaUiState({ sortMode: 'soonest' });
-    writeQuotaUiState({ tab: 'kimi' });
+    writeQuotaUiState({ tab: 'codex' });
 
-    expect(readQuotaUiState()).toEqual({ tab: 'kimi', sortMode: 'soonest' });
+    expect(readQuotaUiState()).toEqual({ tab: 'codex', sortMode: 'soonest' });
   });
 
   test('rejects values that are not part of the current contract', () => {

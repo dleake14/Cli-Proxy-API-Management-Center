@@ -1,0 +1,424 @@
+diff --git a/src/features/quota/constants.ts b/src/features/quota/constants.ts
+index 7a66e4d..2d05e12 100644
+--- a/src/features/quota/constants.ts
++++ b/src/features/quota/constants.ts
+@@ -6,8 +6,6 @@ export const QUOTA_TAB_ORDER: readonly QuotaProviderType[] = [
+   'claude',
+   'xai',
+   'antigravity',
+-  'ollama',
+-  'kimi',
+ ];
+
+ export type QuotaTabId = 'all' | QuotaProviderType;
+diff --git a/src/features/quota/logic.ts b/src/features/quota/logic.ts
+index 61c88c1..65aa0c1 100644
+--- a/src/features/quota/logic.ts
++++ b/src/features/quota/logic.ts
+@@ -22,26 +22,6 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
+   xai: XAI_CONFIG.filterFn,
+ };
+
+-/**
+- * Ollama 的占位条目。
+- *
+- * Ollama 不是 CLIProxyAPI 的原生 OAuth 提供商：auth-dir 里没有它的凭证文件，
+- * 后端也就永远不会把它列进 `/auth-files`。额度页又把每张卡绑在一个凭证文件上，
+- * 所以这里人工造一个条目，让 Ollama 以独立的「账户」出现在同一个网格里。
+- *
+- * `name` 就是卡头显示的文案，同时是额度缓存的键；`runtime_only` 让它不进删除/
+- * 停用流程（没有后端实体可操作）。
+- */
+-export const OLLAMA_SYNTHETIC_FILE: AuthFileItem = {
+-  name: 'Ollama Cloud',
+-  provider: 'ollama',
+-  type: 'ollama',
+-  email: 'Ollama Cloud',
+-  runtimeOnly: true,
+-  disabled: false,
+-  unavailable: false,
+-};
+-
+ export interface QuotaFileEntry {
+   file: AuthFileItem;
+   type: QuotaProviderType;
+@@ -54,8 +34,9 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType
+  * 把文件列表归类为额度条目：不支持额度或已停用的文件被过滤，
+  * 结果按 QUOTA_TAB_ORDER 分组排列（'全部' tab 的卡片顺序即由此决定）。
+  *
+- * 后端永远不列 Ollama（见 OLLAMA_SYNTHETIC_FILE），所以在这里补一条；
+- * 一旦真的出现 ollama 凭证，占位条就不再注入，避免双卡。
++ * Only the four supported operator-facing providers are in QUOTA_TAB_ORDER;
++ * other provider files remain available to their owning surfaces but do not
++ * render as quota cards here.
+  */
+ export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
+   const groups = new Map<QuotaProviderType, QuotaFileEntry[]>(
+@@ -67,11 +48,6 @@ export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
+     groups.get(type)?.push({ file, type });
+   }
+
+-  const virtual: AuthFileItem[] = (groups.get('ollama')?.length ?? 0) === 0 ? [OLLAMA_SYNTHETIC_FILE] : [];
+-  for (const file of virtual) {
+-    groups.get('ollama')?.push({ file, type: 'ollama' });
+-  }
+-
+   return QUOTA_TAB_ORDER.flatMap((type) => groups.get(type) ?? []);
+ }
+
+diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
+index 7acd14b..e48d5e9 100644
+--- a/src/i18n/locales/en.json
++++ b/src/i18n/locales/en.json
+@@ -423,7 +423,7 @@
+     "seven_day_sonnet": "7-day Sonnet",
+     "seven_day_cowork": "7-day Cowork",
+     "iguana_necktie": "Iguana Necktie",
+-    "seven_day_fable": "7-day Fable 5",
++    "seven_day_fable": "fable",
+     "extra_usage_label": "Extra Usage",
+     "plan_label": "Plan",
+     "plan_unknown": "Unknown",
+@@ -1191,7 +1191,7 @@
+     "windows_legend_current": "current window",
+     "windows_legend_upcoming": "upcoming",
+     "windows_legend_elapsed": "elapsed",
+-    "windows_legend_reset_credit": "manual reset expiry",
++    "windows_legend_reset_credit": "manual reset expiration",
+     "soonest_row_hint": "Recovers first on this credential",
+     "windows_reset_credit": "Manual reset",
+     "windows_credit_granted": "Granted",
+diff --git a/src/i18n/locales/ru.json b/src/i18n/locales/ru.json
+index 55a8538..fd4097b 100644
+--- a/src/i18n/locales/ru.json
++++ b/src/i18n/locales/ru.json
+@@ -416,7 +416,7 @@
+     "seven_day_sonnet": "7 дней Sonnet",
+     "seven_day_cowork": "7 дней Cowork",
+     "iguana_necktie": "Iguana Necktie",
+-    "seven_day_fable": "7 дней Fable 5",
++    "seven_day_fable": "fable",
+     "extra_usage_label": "Дополнительное использование",
+     "plan_label": "План",
+     "plan_unknown": "Неизвестно",
+diff --git a/src/i18n/locales/zh-CN.json b/src/i18n/locales/zh-CN.json
+index fb7b8d7..83b7435 100644
+--- a/src/i18n/locales/zh-CN.json
++++ b/src/i18n/locales/zh-CN.json
+@@ -423,7 +423,7 @@
+     "seven_day_sonnet": "7 天 Sonnet",
+     "seven_day_cowork": "7 天 Cowork",
+     "iguana_necktie": "Iguana Necktie",
+-    "seven_day_fable": "7 天 Fable 5",
++    "seven_day_fable": "fable",
+     "extra_usage_label": "额外用量",
+     "plan_label": "套餐",
+     "plan_unknown": "未知",
+diff --git a/src/i18n/locales/zh-TW.json b/src/i18n/locales/zh-TW.json
+index 72ca525..9d780ca 100644
+--- a/src/i18n/locales/zh-TW.json
++++ b/src/i18n/locales/zh-TW.json
+@@ -423,7 +423,7 @@
+     "seven_day_sonnet": "7 天 Sonnet",
+     "seven_day_cowork": "7 天 Cowork",
+     "iguana_necktie": "Iguana Necktie",
+-    "seven_day_fable": "7 天 Fable 5",
++    "seven_day_fable": "fable",
+     "extra_usage_label": "額外用量",
+     "plan_label": "方案",
+     "plan_unknown": "未知",
+diff --git a/tests/quotaPageLogic.test.ts b/tests/quotaPageLogic.test.ts
+index 44d6d07..40dc413 100644
+--- a/tests/quotaPageLogic.test.ts
++++ b/tests/quotaPageLogic.test.ts
+@@ -37,15 +37,15 @@ describe('resolveQuotaProviderType', () => {
+
+ describe('classifyQuotaFiles', () => {
+   test('uses the requested top-bar provider order', () => {
+-    expect(QUOTA_TAB_ORDER).toEqual(['codex', 'claude', 'xai', 'antigravity', 'ollama', 'kimi']);
++    expect(QUOTA_TAB_ORDER).toEqual(['codex', 'claude', 'xai', 'antigravity']);
+   });
+
+   test('drops unsupported and disabled files', () => {
+     const entries = classifyQuotaFiles(FILES);
+     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
+     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
+-    // 5 supported credentials + virtual Ollama card.
+-    expect(entries).toHaveLength(6);
++    // Only the four operator-facing providers render quota entries.
++    expect(entries).toHaveLength(4);
+   });
+
+   test('orders entries by provider tab order', () => {
+@@ -55,48 +55,26 @@ describe('classifyQuotaFiles', () => {
+       'codex',
+       'claude',
+       'xai',
+-      'ollama',
+-      'kimi',
+     ]);
+   });
+ });
+
+-describe('classifyQuotaFiles — virtual Ollama card', () => {
+-  test('injects Ollama even though the backend can never list it', () => {
+-    // CLIProxyAPI has no native Ollama provider, so no auth file is ever returned
+-    // for it. The card must still appear, or the panel cannot show Ollama at all.
+-    const ollama = classifyQuotaFiles(FILES).filter((entry) => entry.type === 'ollama');
+-    expect(ollama).toHaveLength(1);
+-    expect(ollama[0].file.name).toBe('Ollama Cloud');
+-    expect(ollama[0].file.disabled).toBe(false);
+-  });
+-
+-  test('stays out of the way when a real ollama credential exists (no duplicate card)', () => {
++describe('classifyQuotaFiles — visible provider boundary', () => {
++  test('excludes Ollama and Kimi from the visible quota surface', () => {
+     const entries = classifyQuotaFiles([...FILES, file('ollama-key.json', 'ollama')]);
+-    const names = entries.filter((entry) => entry.type === 'ollama').map((entry) => entry.file.name);
+-    expect(names).toEqual(['ollama-key.json']);
+-  });
+-
+-  test('is refreshable like any other card, not a disabled placeholder', () => {
+-    const entry = classifyQuotaFiles(FILES).find((item) => item.type === 'ollama');
+-    expect(entry).toBeDefined();
+-    // The card's refresh affordance is gated on `file.disabled` only, so an
+-    // enabled synthetic entry stays clickable exactly like a real credential.
+-    expect(entry?.file.disabled).toBe(false);
+-    expect(isQuotaRefreshDisabled(!entry?.file.disabled, false, false)).toBe(false);
++    expect(entries.map((entry) => entry.type)).not.toContain('ollama');
++    expect(entries.map((entry) => entry.type)).not.toContain('kimi');
+   });
+ });
+
+ describe('buildTabCounts', () => {
+   test('counts per provider plus an all total, zero-filling empty tabs', () => {
+     expect(buildTabCounts(classifyQuotaFiles(FILES))).toEqual({
+-      all: 6,
++      all: 4,
+       claude: 1,
+       antigravity: 0,
+       codex: 2,
+       xai: 1,
+-      kimi: 1,
+-      ollama: 1,
+     });
+   });
+ });
+@@ -105,13 +83,7 @@ describe('filterEntriesByTab', () => {
+   const entries = classifyQuotaFiles(FILES);
+
+   test("passes everything through on the 'all' tab", () => {
+-    expect(filterEntriesByTab(entries, 'all')).toHaveLength(6);
+-  });
+-
+-  test('isolates the virtual Ollama card on its own tab', () => {
+-    expect(filterEntriesByTab(entries, 'ollama').map((entry) => entry.file.name)).toEqual([
+-      'Ollama Cloud',
+-    ]);
++    expect(filterEntriesByTab(entries, 'all')).toHaveLength(4);
+   });
+
+   test('filters to a single provider', () => {
+@@ -179,7 +151,6 @@ describe('sortQuotaEntries', () => {
+       resolver({
+         'codex-a.json': 300,
+         'claude-a.json': 100,
+-        'kimi-a.json': 200,
+         'codex-b.json': 400,
+         'grok-a.json': 50,
+       })
+@@ -187,10 +158,8 @@ describe('sortQuotaEntries', () => {
+     expect(byName(sorted)).toEqual([
+       'grok-a.json',
+       'claude-a.json',
+-      'kimi-a.json',
+       'codex-a.json',
+       'codex-b.json',
+-      'Ollama Cloud',
+     ]);
+   });
+
+@@ -199,16 +168,14 @@ describe('sortQuotaEntries', () => {
+     const sorted = sortQuotaEntries(
+       entries,
+       'soonest',
+-      resolver({ 'codex-b.json': 200, 'kimi-a.json': 100 })
++      resolver({ 'codex-b.json': 200 })
+     );
+     expect(byName(sorted)).toEqual([
+-      'kimi-a.json',
+       'codex-b.json',
+       // unresolved tail, in the order classifyQuotaFiles produced
+       'codex-a.json',
+       'claude-a.json',
+       'grok-a.json',
+-      'Ollama Cloud',
+     ]);
+   });
+
+@@ -237,7 +204,7 @@ describe('sortQuotaEntries', () => {
+
+ describe('buildQuotaCardLabels', () => {
+   const labelFor = (type: string) =>
+-    ({ codex: 'Codex', claude: 'Claude', xai: 'Grok', antigravity: 'Gemini', ollama: 'Ollama' })[
++    ({ codex: 'Codex', claude: 'Claude', xai: 'Grok', antigravity: 'Gemini' })[
+       type
+     ] ?? type;
+
+@@ -251,12 +218,6 @@ describe('buildQuotaCardLabels', () => {
+     expect(labels.get('antigravity-dleake14@gmail.com.json')).toBe('Gemini');
+   });
+
+-  test('keeps the runtime-only virtual card name as-is', () => {
+-    const entries = classifyQuotaFiles([]);
+-    const labels = buildQuotaCardLabels(entries, labelFor);
+-    expect(labels.get('Ollama Cloud')).toBe('Ollama Cloud');
+-  });
+-
+   test('appends an account hint when one provider has multiple cards', () => {
+     const entries = classifyQuotaFiles([
+       file('codex-a@gmail.com.json', 'codex', { email: 'a@gmail.com' }),
+diff --git a/tests/quotaTimeline.test.ts b/tests/quotaTimeline.test.ts
+index a843354..3ffb15a 100644
+--- a/tests/quotaTimeline.test.ts
++++ b/tests/quotaTimeline.test.ts
+@@ -248,6 +248,7 @@ describe('buildTimelineLane', () => {
+       status: 'success',
+       windows: [
+         { label: '7-day', usedPercent: 93, resetAtMs: later, periodHours: 168 },
++        { id: 'seven-day-fable', label: 'fable', usedPercent: 64, resetAtMs: later, periodHours: 168 },
+         { label: '5-hour', usedPercent: 20, resetAtMs: soon, periodHours: 5 },
+       ],
+     };
+@@ -277,10 +278,26 @@ describe('buildTimelineLane', () => {
+     // Every limit is still summarized in the lane head regardless of the pick.
+     expect(weekly.limits).toEqual([
+       { label: '7-day', remaining: 7 },
++      { label: 'fable', remaining: 36 },
+       { label: '5-hour', remaining: 80 },
+     ]);
+   });
+
++  test('keeps the canonical fable row in the Claude reset timeline', () => {
++    const reset = at(2026, 7, 1, 20);
++    const lane = buildTimelineLane({
++      ...base,
++      provider: 'claude',
++      quota: {
++        status: 'success',
++        windows: [{ id: 'seven-day-fable', label: 'fable', usedPercent: 40, resetAtMs: reset, periodHours: 168 }],
++      },
++      maxPeriodHours: 14 * 24,
++    });
++    expect(lane.limits).toEqual([{ label: 'fable', remaining: 60 }]);
++    expect(lane.anchorMs).toBe(reset);
++  });
++
+   test('codex: keeps the weekly lane on the account quota instead of Spark quota', () => {
+     const accountReset = at(2026, 7, 1, 20);
+     const sparkReset = at(2026, 6, 29, 20);
+@@ -440,20 +457,75 @@ describe('buildTimelineLane', () => {
+     expect(lane.limits).toEqual([{ label: 'GrokBuild', remaining: 95 }]);
+   });
+
+-  test('xai without a weekly limit produces no window at all', () => {
+-    // A monthly summary carries periodEnd too, but that is a billing cycle.
+-    for (const periodType of ['monthly', 'unknown'] as const) {
+-      const lane = buildTimelineLane({
+-        ...base,
+-        provider: 'xai',
+-        quota: {
+-          status: 'success',
+-          billing: { periodType, usagePercent: 69, resetAtMs: 9000, periodHours: 720 },
++  test('xai: monthly period produces no window; unknown period with usable reset creates a lane', () => {
++    // Monthly is a billing cycle, never a quota window.
++    const monthly = buildTimelineLane({
++      ...base,
++      provider: 'xai',
++      quota: {
++        status: 'success',
++        billing: { periodType: 'monthly', usagePercent: 69, resetAtMs: 9000, periodHours: 720 },
++      },
++    });
++    expect(monthly.anchorMs).toBeNull();
++    expect(laneHasWindow(monthly)).toBe(false);
++
++    // Unknown period with a usable reset still gets a lane (paid-health fallback).
++    const unknown = buildTimelineLane({
++      ...base,
++      provider: 'xai',
++      quota: {
++        status: 'success',
++        billing: { periodType: 'unknown', usagePercent: 69, resetAtMs: 9000, periodHours: 720 },
++      },
++    });
++    expect(unknown.anchorMs).toBe(9000);
++    expect(laneHasWindow(unknown)).toBe(true);
++  });
++
++  test('xai: every Grok lane carries the pinned Sep 12 rate-limit reset credit', () => {
++    // The one-time grant is not in the API payload, so the lane builder pins
++    // it unconditionally — both paid-health lanes and real weekly billing
++    // lanes (where the user's account actually runs) must show it.
++    const sep12Cst = new Date('2026-09-12T06:00:00Z').getTime();
++
++    const paidHealth = buildTimelineLane({
++      ...base,
++      provider: 'xai',
++      quota: {
++        status: 'success',
++        billing: {
++          mode: 'paid-health',
++          periodType: 'unknown',
++          usagePercent: null,
+         },
+-      });
+-      expect(lane.anchorMs).toBeNull();
+-      expect(laneHasWindow(lane)).toBe(false);
+-    }
++      },
++    });
++    // No window bars (no resetAtMs/periodEnd), but the credit is still pinned.
++    expect(paidHealth.anchorMs).toBeNull();
++    expect(laneHasWindow(paidHealth)).toBe(false);
++    expect(paidHealth.resetCredits).toHaveLength(1);
++    expect(paidHealth.resetCredits[0].id).toBe('grok:rate-limit-reset');
++    expect(paidHealth.resetCredits[0].expiresAtMs).toBe(sep12Cst);
++
++    // Weekly billing lane — the mode the user's Grok account actually runs.
++    const weekly = buildTimelineLane({
++      ...base,
++      provider: 'xai',
++      quota: {
++        status: 'success',
++        billing: {
++          periodType: 'weekly',
++          usagePercent: 41,
++          resetAtMs: 9000,
++          periodHours: 168,
++          productUsage: [],
++        },
++      },
++    });
++    expect(weekly.anchorMs).toBe(9000);
++    expect(weekly.resetCredits).toHaveLength(1);
++    expect(weekly.resetCredits[0].expiresAtMs).toBe(sep12Cst);
+   });
+
+   test('xai defaults to a 7-day period when the payload states no start', () => {
+diff --git a/tests/quotaUiState.test.ts b/tests/quotaUiState.test.ts
+index 012a813..e69ebcd 100644
+--- a/tests/quotaUiState.test.ts
++++ b/tests/quotaUiState.test.ts
+@@ -53,9 +53,9 @@ describe('quota ui state', () => {
+
+   test('writing one preference preserves the other', () => {
+     writeQuotaUiState({ sortMode: 'soonest' });
+-    writeQuotaUiState({ tab: 'kimi' });
++    writeQuotaUiState({ tab: 'codex' });
+
+-    expect(readQuotaUiState()).toEqual({ tab: 'kimi', sortMode: 'soonest' });
++    expect(readQuotaUiState()).toEqual({ tab: 'codex', sortMode: 'soonest' });
+   });
+
+   test('rejects values that are not part of the current contract', () => {

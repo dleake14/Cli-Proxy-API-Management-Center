@@ -37,15 +37,15 @@ describe('resolveQuotaProviderType', () => {
 
 describe('classifyQuotaFiles', () => {
   test('uses the requested top-bar provider order', () => {
-    expect(QUOTA_TAB_ORDER).toEqual(['codex', 'claude', 'xai', 'antigravity', 'ollama', 'kimi']);
+    expect(QUOTA_TAB_ORDER).toEqual(['codex', 'claude', 'xai', 'antigravity']);
   });
 
   test('drops unsupported and disabled files', () => {
     const entries = classifyQuotaFiles(FILES);
     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
-    // 5 supported credentials + virtual Ollama card.
-    expect(entries).toHaveLength(6);
+    // Only the four operator-facing providers render quota entries.
+    expect(entries).toHaveLength(4);
   });
 
   test('orders entries by provider tab order', () => {
@@ -55,48 +55,26 @@ describe('classifyQuotaFiles', () => {
       'codex',
       'claude',
       'xai',
-      'ollama',
-      'kimi',
     ]);
   });
 });
 
-describe('classifyQuotaFiles — virtual Ollama card', () => {
-  test('injects Ollama even though the backend can never list it', () => {
-    // CLIProxyAPI has no native Ollama provider, so no auth file is ever returned
-    // for it. The card must still appear, or the panel cannot show Ollama at all.
-    const ollama = classifyQuotaFiles(FILES).filter((entry) => entry.type === 'ollama');
-    expect(ollama).toHaveLength(1);
-    expect(ollama[0].file.name).toBe('Ollama Cloud');
-    expect(ollama[0].file.disabled).toBe(false);
-  });
-
-  test('stays out of the way when a real ollama credential exists (no duplicate card)', () => {
+describe('classifyQuotaFiles — visible provider boundary', () => {
+  test('excludes Ollama and Kimi from the visible quota surface', () => {
     const entries = classifyQuotaFiles([...FILES, file('ollama-key.json', 'ollama')]);
-    const names = entries.filter((entry) => entry.type === 'ollama').map((entry) => entry.file.name);
-    expect(names).toEqual(['ollama-key.json']);
-  });
-
-  test('is refreshable like any other card, not a disabled placeholder', () => {
-    const entry = classifyQuotaFiles(FILES).find((item) => item.type === 'ollama');
-    expect(entry).toBeDefined();
-    // The card's refresh affordance is gated on `file.disabled` only, so an
-    // enabled synthetic entry stays clickable exactly like a real credential.
-    expect(entry?.file.disabled).toBe(false);
-    expect(isQuotaRefreshDisabled(!entry?.file.disabled, false, false)).toBe(false);
+    expect(entries.map((entry) => entry.type)).not.toContain('ollama');
+    expect(entries.map((entry) => entry.type)).not.toContain('kimi');
   });
 });
 
 describe('buildTabCounts', () => {
   test('counts per provider plus an all total, zero-filling empty tabs', () => {
     expect(buildTabCounts(classifyQuotaFiles(FILES))).toEqual({
-      all: 6,
+      all: 4,
       claude: 1,
       antigravity: 0,
       codex: 2,
       xai: 1,
-      kimi: 1,
-      ollama: 1,
     });
   });
 });
@@ -105,13 +83,7 @@ describe('filterEntriesByTab', () => {
   const entries = classifyQuotaFiles(FILES);
 
   test("passes everything through on the 'all' tab", () => {
-    expect(filterEntriesByTab(entries, 'all')).toHaveLength(6);
-  });
-
-  test('isolates the virtual Ollama card on its own tab', () => {
-    expect(filterEntriesByTab(entries, 'ollama').map((entry) => entry.file.name)).toEqual([
-      'Ollama Cloud',
-    ]);
+    expect(filterEntriesByTab(entries, 'all')).toHaveLength(4);
   });
 
   test('filters to a single provider', () => {
@@ -179,7 +151,6 @@ describe('sortQuotaEntries', () => {
       resolver({
         'codex-a.json': 300,
         'claude-a.json': 100,
-        'kimi-a.json': 200,
         'codex-b.json': 400,
         'grok-a.json': 50,
       })
@@ -187,10 +158,8 @@ describe('sortQuotaEntries', () => {
     expect(byName(sorted)).toEqual([
       'grok-a.json',
       'claude-a.json',
-      'kimi-a.json',
       'codex-a.json',
       'codex-b.json',
-      'Ollama Cloud',
     ]);
   });
 
@@ -199,16 +168,14 @@ describe('sortQuotaEntries', () => {
     const sorted = sortQuotaEntries(
       entries,
       'soonest',
-      resolver({ 'codex-b.json': 200, 'kimi-a.json': 100 })
+      resolver({ 'codex-b.json': 200 })
     );
     expect(byName(sorted)).toEqual([
-      'kimi-a.json',
       'codex-b.json',
       // unresolved tail, in the order classifyQuotaFiles produced
       'codex-a.json',
       'claude-a.json',
       'grok-a.json',
-      'Ollama Cloud',
     ]);
   });
 
@@ -237,7 +204,7 @@ describe('sortQuotaEntries', () => {
 
 describe('buildQuotaCardLabels', () => {
   const labelFor = (type: string) =>
-    ({ codex: 'Codex', claude: 'Claude', xai: 'Grok', antigravity: 'Gemini', ollama: 'Ollama' })[
+    ({ codex: 'Codex', claude: 'Claude', xai: 'Grok', antigravity: 'Gemini' })[
       type
     ] ?? type;
 
@@ -249,12 +216,6 @@ describe('buildQuotaCardLabels', () => {
     const labels = buildQuotaCardLabels(entries, labelFor);
     expect(labels.get('codex-9ca96e91-dleake14@gmail.com-prolite.json')).toBe('Codex');
     expect(labels.get('antigravity-dleake14@gmail.com.json')).toBe('Gemini');
-  });
-
-  test('keeps the runtime-only virtual card name as-is', () => {
-    const entries = classifyQuotaFiles([]);
-    const labels = buildQuotaCardLabels(entries, labelFor);
-    expect(labels.get('Ollama Cloud')).toBe('Ollama Cloud');
   });
 
   test('appends an account hint when one provider has multiple cards', () => {

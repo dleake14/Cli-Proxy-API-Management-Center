@@ -1,0 +1,39 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {"must_cover": [
+    "CPAMC Quota windows timeline gives Claude, Fable, Grok, and Codex distinct colors",
+    "colors remain distinct in light and dark themes",
+    "deterministic rendering assertions",
+    "built UI screenshot with zero browser console errors",
+    "rollback pointer"
+  ]},
+  "changed_files": [
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "tests/quotaTimelineRendering.test.ts"
+  ],
+  "validation": {"command": "bun run verify", "exit_code": 0, "log_path": "validation.log"},
+  "evidence": {"diff_path": "diff.patch", "proof_paths": [
+    "proof/provider-timeline-colors.png",
+    "proof/browser-console.log"
+  ]},
+  "rollback": {
+    "command": "reverse only the provider-timeline color hunks retained in diff.patch",
+    "baseline_ref": "git:03845a413558ed6669756bf1a919835b2205abe1 with pre-existing WIP preserved"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": ["src/features/quota/components/QuotaTimeline.tsx"],
+    "required_text": [
+      {"path": "src/features/quota/components/QuotaTimeline.tsx", "contains": "TIMELINE_ACCENTS"},
+      {"path": "tests/quotaTimelineRendering.test.ts", "contains": "uses distinct timeline colors"}
+    ],
+    "forbidden_text": []
+  },
+  "proof": {
+    "browser": "Chromium via Playwright",
+    "route": "http://127.0.0.1:5173/#/quota",
+    "viewport": "1600x1200",
+    "console_error_count": 0,
+    "observed_colors": {"Claude": "#c05621", "Fable": "#7c3aed", "Grok": "#0f766e", "Codex": "#3538d4"}
+  }
+}

@@ -20,6 +20,7 @@ import { useNow } from '@/hooks/useNow';
 import type { ResolvedTheme, ThemeColors } from '@/types';
 import {
   buildTimelineLane,
+  buildTimelineLanes,
   laneHasWindow,
   projectLane,
   projectResetCredits,
@@ -33,7 +34,15 @@ import styles from './QuotaTimeline.module.scss';
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
+const TIMELINE_ACCENTS = {
+  claude: { light: '#c05621', dark: '#e8a882' },
+  fable: { light: '#7c3aed', dark: '#c4b5fd' },
+  xai: { light: '#0f766e', dark: '#5eead4' },
+  codex: { light: '#3538d4', dark: '#a5b4fc' },
+} as const;
+
 const pad = (value: number) => String(value).padStart(2, '0');
+
 const formatDay = (ms: number) => {
   const d = new Date(ms);
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
@@ -110,8 +119,8 @@ export function QuotaTimeline({
   const lanes = useMemo(
     () =>
       laneInputs
-        .map((input) =>
-          buildTimelineLane({
+        .flatMap((input) =>
+          buildTimelineLanes({
             ...input,
             // Weekly mode prefers the longest readable window. Session mode
             // asks specifically for a real 5-hour window; longer periods must
@@ -284,7 +293,7 @@ export function QuotaTimeline({
           <span className={styles.legendItem}>
             <span className={styles.swatchCredit} />
             {t('quota_management.windows_legend_reset_credit', {
-              defaultValue: 'manual reset expiry',
+              defaultValue: 'manual reset expiration',
             })}
           </span>
           <span className={styles.legendNote}>
@@ -329,6 +338,15 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
   const colorSet = TYPE_COLORS[lane.provider] || TYPE_COLORS.unknown;
   const color: ThemeColors =
     resolvedTheme === 'dark' && colorSet.dark ? colorSet.dark : colorSet.light;
+  const risk =
+    lane.remaining !== null && lane.remaining <= 25
+      ? 'critical'
+      : lane.remaining !== null && lane.remaining <= 50
+        ? 'warning'
+        : 'normal';
+  const timelineColorKey = lane.name.endsWith(':fable') ? 'fable' : lane.provider;
+  const timelineColor = TIMELINE_ACCENTS[timelineColorKey as keyof typeof TIMELINE_ACCENTS];
+  const accent = timelineColor?.[resolvedTheme] ?? color.text;
 
   // Sub-day windows are labelled in hours — rounding 5h to days gives "0d".
   const periodLabel =
@@ -341,7 +359,12 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
           : `${Math.round(lane.periodHours / 24)}d`;
 
   return (
-    <div className={styles.lane} style={{ '--provider-accent': color.text } as CSSProperties}>
+    <div
+      className={styles.lane}
+      data-timeline-lane={lane.name}
+      data-quota-risk={risk}
+      style={{ '--provider-accent': accent } as CSSProperties}
+    >
       <div className={styles.laneHead}>
         <div className={styles.laneTop}>
           <span className={styles.laneDot} />

@@ -1,0 +1,21 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC Claude and Fable quota-window timeline",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": [
+      "validation.log",
+      "diff.patch",
+      "proof/cpamc-fable-timeline.png",
+      "proof/browser-console.log"
+    ]
+  },
+  "scope": {
+    "must_cover": ["CPAMC", "Claude", "Fable", "59%", "40%", "warning accent", "rollback"]
+  },
+  "floors": {"min_words": 80, "min_words_per_covered_term": 1},
+  "forbidden_tokens": ["TODO", "TBD", "PLACEHOLDER", "OLLAMA_API_KEY="]
+}

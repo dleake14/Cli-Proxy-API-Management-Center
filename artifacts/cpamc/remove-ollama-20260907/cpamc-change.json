@@ -1,0 +1,50 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "visible quota tabs contain only Codex, Claude, Grok/XAI, and Gemini/Antigravity",
+      "Ollama and Kimi quota entries are excluded from classification and rendering",
+      "Claude quota includes a canonical fable bar and reset timeline row",
+      "deterministic quota classification and tab tests",
+      "rollback pointer"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/constants.ts",
+    "src/features/quota/logic.ts",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/ru.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "tests/quotaPageLogic.test.ts",
+    "tests/quotaTimeline.test.ts",
+    "tests/quotaUiState.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": ["proof/quota-provider-surface.html"]
+  },
+  "rollback": {
+    "command": "git restore --source=03845a413558ed6669756bf1a919835b2205abe1 -- src/features/quota/constants.ts src/features/quota/logic.ts tests/quotaPageLogic.test.ts",
+    "baseline_ref": "git:03845a413558ed6669756bf1a919835b2205abe1"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/constants.ts",
+      "src/features/quota/logic.ts",
+      "tests/quotaPageLogic.test.ts"
+    ],
+    "required_text": [],
+    "forbidden_text": [
+      {"path": "src/features/quota/constants.ts", "contains": "'ollama'"},
+      {"path": "src/features/quota/constants.ts", "contains": "'kimi'"},
+      {"path": "src/features/quota/logic.ts", "contains": "OLLAMA_SYNTHETIC_FILE"}
+    ]
+  }
+}

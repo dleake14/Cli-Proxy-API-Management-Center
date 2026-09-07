@@ -43,6 +43,10 @@ export default defineConfig({
       removeViteModuleLoader: true
     })
   ],
+  server: {
+    host: '0.0.0.0',
+    port: 5173
+  },
   define: {
     __APP_VERSION__: JSON.stringify(getVersion())
   },

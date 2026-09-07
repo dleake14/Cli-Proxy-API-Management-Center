@@ -1,0 +1,53 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "CPAMC Quota windows weekly timeline shows a distinct Fable bar under Claude",
+      "Fable bar uses the canonical seven-day-fable window reset and remaining percentage",
+      "deterministic timeline rendering test",
+      "built UI screenshot with zero browser console errors",
+      "rollback pointer"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "tests/quotaTimeline.test.ts",
+    "tests/quotaTimelineRendering.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "proof/cpamc-fable-timeline.png",
+      "proof/browser-console.log"
+    ]
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/fable-timeline-20260907/diff.patch",
+    "baseline_ref": "git:03845a413558ed6669756bf1a919835b2205abe1 with pre-existing modified timeline files recorded in validation.log"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/quotaTimelineModel.ts",
+      "src/features/quota/components/QuotaTimeline.tsx"
+    ],
+    "required_text": [
+      {"path": "src/features/quota/quotaTimelineModel.ts", "contains": "seven-day-fable"},
+      {"path": "src/features/quota/components/QuotaTimeline.tsx", "contains": "data-quota-risk"}
+    ],
+    "forbidden_text": []
+  },
+  "proof": {
+    "browser": "Chromium via Playwright",
+    "route": "http://127.0.0.1:5173/#/quota",
+    "viewport": "1600x1100",
+    "console_error_count": 0,
+    "observed_lanes": ["Claude 59% remaining", "Claude · Fable 40% remaining"]
+  }
+}

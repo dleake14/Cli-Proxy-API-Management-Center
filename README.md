@@ -152,6 +152,20 @@ bun run format     # Prettier
 bun run type-check # tsc --noEmit
 ```
 
+### Local quota UI proof harness
+
+For deterministic quota-page browser checks, build the bundle and run the
+test-only management mock against it:
+
+```bash
+python3 tools/mock-management.py dist/index.html 8399
+```
+
+The mock serves local auth-file metadata only and never reads or exposes
+management credentials. Use the retained proof manifests under
+`artifacts/cpamc/` for the corresponding route, viewport, and console-error
+evidence.
+
 ## Contributing
 
 Issues and PRs are welcome. Please include:

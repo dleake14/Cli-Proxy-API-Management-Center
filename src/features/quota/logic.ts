@@ -22,26 +22,6 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
   xai: XAI_CONFIG.filterFn,
 };
 
-/**
- * Ollama 的占位条目。
- *
- * Ollama 不是 CLIProxyAPI 的原生 OAuth 提供商：auth-dir 里没有它的凭证文件，
- * 后端也就永远不会把它列进 `/auth-files`。额度页又把每张卡绑在一个凭证文件上，
- * 所以这里人工造一个条目，让 Ollama 以独立的「账户」出现在同一个网格里。
- *
- * `name` 就是卡头显示的文案，同时是额度缓存的键；`runtime_only` 让它不进删除/
- * 停用流程（没有后端实体可操作）。
- */
-export const OLLAMA_SYNTHETIC_FILE: AuthFileItem = {
-  name: 'Ollama Cloud',
-  provider: 'ollama',
-  type: 'ollama',
-  email: 'Ollama Cloud',
-  runtimeOnly: true,
-  disabled: false,
-  unavailable: false,
-};
-
 export interface QuotaFileEntry {
   file: AuthFileItem;
   type: QuotaProviderType;
@@ -54,8 +34,9 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType 
  * 把文件列表归类为额度条目：不支持额度或已停用的文件被过滤，
  * 结果按 QUOTA_TAB_ORDER 分组排列（'全部' tab 的卡片顺序即由此决定）。
  *
- * 后端永远不列 Ollama（见 OLLAMA_SYNTHETIC_FILE），所以在这里补一条；
- * 一旦真的出现 ollama 凭证，占位条就不再注入，避免双卡。
+ * Only the four supported operator-facing providers are in QUOTA_TAB_ORDER;
+ * other provider files remain available to their owning surfaces but do not
+ * render as quota cards here.
  */
 export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
   const groups = new Map<QuotaProviderType, QuotaFileEntry[]>(
@@ -65,11 +46,6 @@ export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
     const type = resolveQuotaProviderType(file);
     if (!type) continue;
     groups.get(type)?.push({ file, type });
-  }
-
-  const virtual: AuthFileItem[] = (groups.get('ollama')?.length ?? 0) === 0 ? [OLLAMA_SYNTHETIC_FILE] : [];
-  for (const file of virtual) {
-    groups.get('ollama')?.push({ file, type: 'ollama' });
   }
 
   return QUOTA_TAB_ORDER.flatMap((type) => groups.get(type) ?? []);

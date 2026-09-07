@@ -21,6 +21,99 @@ const baseProps = {
 };
 
 describe('QuotaTimeline rendering', () => {
+  test('renders separate all-models and Fable bars under one Claude credential', () => {
+    const now = new Date(2026, 7, 1, 12).getTime();
+    const reset = new Date(2026, 7, 5, 12).getTime();
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        entries: [{ file: { name: 'Claude account', type: 'claude' }, type: 'claude' }],
+        displayNameFor: (name: string) => name,
+        resolvedTheme: 'light',
+        now,
+        quotaFor: () => ({
+          status: 'success',
+          windows: [
+            {
+              id: 'seven-day',
+              label: 'All models',
+              usedPercent: 41,
+              resetAtMs: reset,
+              periodHours: 168,
+            },
+            {
+              id: 'seven-day-fable',
+              label: 'Fable',
+              usedPercent: 60,
+              resetAtMs: reset,
+              periodHours: 168,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(markup).toContain('Claude account · Fable');
+    expect(markup).toContain('data-timeline-lane="Claude account"');
+    expect(markup).toContain('data-timeline-lane="Claude account:fable"');
+    expect(markup).toContain('data-quota-risk="normal"');
+    expect(markup).toContain('data-quota-risk="warning"');
+    expect(markup).toContain('59%');
+    expect(markup).toContain('40%');
+    expect(markup).toContain('--provider-accent:#c05621');
+    expect(markup).toContain('--provider-accent:#7c3aed');
+  });
+
+  test('uses distinct timeline colors for Claude, Fable, Grok, and Codex', () => {
+    const reset = new Date(2026, 7, 5, 12).getTime();
+    const colorEntries: QuotaFileEntry[] = [
+      { file: { name: 'claude.json', type: 'claude' }, type: 'claude' },
+      { file: { name: 'grok.json', type: 'xai' }, type: 'xai' },
+      { file: { name: 'codex.json', type: 'codex' }, type: 'codex' },
+    ];
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        entries: colorEntries,
+        displayNameFor: (name: string) => name,
+        resolvedTheme: 'light',
+        now: new Date(2026, 7, 1, 12).getTime(),
+        quotaFor: (entry: QuotaFileEntry) =>
+          entry.type === 'claude'
+            ? {
+                status: 'success',
+                windows: [
+                  { id: 'seven-day', usedPercent: 41, resetAtMs: reset, periodHours: 168 },
+                  { id: 'seven-day-fable', usedPercent: 60, resetAtMs: reset, periodHours: 168 },
+                ],
+              }
+            : entry.type === 'xai'
+              ? {
+                  status: 'success',
+                  billing: {
+                    periodType: 'weekly',
+                    usagePercent: 30,
+                    resetAtMs: reset,
+                    periodHours: 168,
+                  },
+                }
+              : {
+                  status: 'success',
+                  windows: [{ id: 'weekly', usedPercent: 20, resetAtMs: reset, periodHours: 168 }],
+                },
+      })
+    );
+
+    const laneColors = [
+      ...markup.matchAll(/data-timeline-lane="([^"]+)"[^>]*style="--provider-accent:([^"]+)"/g),
+    ].map((match) => [match[1], match[2]]);
+    expect(laneColors).toEqual([
+      ['claude.json', '#c05621'],
+      ['claude.json:fable', '#7c3aed'],
+      ['grok.json', '#0f766e'],
+      ['codex.json', '#3538d4'],
+    ]);
+    expect(new Set(laneColors.map(([, color]) => color)).size).toBe(4);
+  });
+
   test('shows the selected period date instead of always labelling it Today', () => {
     const markup = renderToStaticMarkup(
       createElement(QuotaTimeline, {
@@ -149,6 +242,42 @@ describe('QuotaTimeline rendering', () => {
 
     expect(markup).toContain('role="img"');
     expect(markup).toContain('08/03 12:00');
+  });
+
+  test('renders the pinned Grok Sep 12 reset as a manual reset tick', () => {
+    // Sep 5, 2026 — the 14-day weekly span covers Sep 6–Sep 19, which
+    // includes the Sep 12 Grok reset credit.
+    const sep5 = new Date(2026, 8, 5, 12).getTime();
+    const sep12 = new Date(2026, 8, 12, 0).getTime();
+
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        entries: [
+          {
+            file: { name: 'grok.json', type: 'xai' },
+            type: 'xai',
+          },
+        ],
+        displayNameFor: (name: string) => name,
+        resolvedTheme: 'light',
+        now: sep5,
+        quotaFor: () => ({
+          status: 'success',
+          billing: {
+            periodType: 'weekly',
+            usagePercent: 30,
+            resetAtMs: sep12,
+            periodHours: 168,
+            productUsage: [],
+          },
+        }),
+      })
+    );
+
+    // The pinned Sep 12 Grok credit renders as a manual reset tick.
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain('Manual reset');
+    expect(markup).toContain('09/12');
   });
 
   test('stays hidden before any credential exposes a usable quota window', () => {

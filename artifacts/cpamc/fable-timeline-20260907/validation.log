@@ -1,0 +1,610 @@
+$ bun run test && bun run lint && bun run build
+$ bun test
+bun test v1.4.0 (34cbb9a40)
+
+tests/authFileIdentity.test.ts:
+(pass) stripJsonExtension > strips the extension from a real codex file name [0.07ms]
+(pass) stripJsonExtension > matches the extension case-insensitively [0.02ms]
+(pass) stripJsonExtension > leaves an extension-less runtime-only id untouched
+(pass) stripJsonExtension > never strips down to an empty string
+(pass) stripJsonExtension > trims surrounding whitespace
+(pass) deriveAuthFileIdentity > leads with the account email and keeps the full name as the secondary row [0.13ms]
+(pass) deriveAuthFileIdentity > treats a whitespace-only email as absent [0.03ms]
+(pass) deriveAuthFileIdentity > treats a non-string email as absent (index signature guard) [0.02ms]
+(pass) deriveAuthFileIdentity > falls back to the file name and drops the duplicate secondary row [0.02ms]
+(pass) deriveAuthFileIdentity > uses the project id when there is no email [0.02ms]
+(pass) deriveAuthFileIdentity > prefers the email over the project id [0.02ms]
+(pass) deriveAuthFileIdentity > never surfaces the account field — it can be a raw API key [0.05ms]
+(pass) deriveAuthFileIdentity > ignores an oauth account even when it looks like an email (do not add it back to the chain) [0.02ms]
+(pass) deriveAuthFileIdentity > suppresses the secondary row for runtime-only entries whose name is the account [0.02ms]
+(pass) deriveAuthFileIdentity > the duplicate guard is case-insensitive [0.02ms]
+(pass) deriveAuthFileIdentity > keeps the disambiguating secondary row for two credentials sharing one email [0.09ms]
+(pass) deriveAuthFileIdentity > does not strip a provider prefix from the secondary row [0.02ms]
+(pass) deriveAuthFileIdentity > handles an empty file name without inventing a placeholder [0.02ms]
+
+tests/sponsorAggregation.test.ts:
+(pass) sponsor aggregation safety > detects multiple configs for one protocol [0.06ms]
+(pass) sponsor aggregation safety > detects multiple OpenAI API keys in one config [0.15ms]
+(pass) sponsor aggregation safety > allows the supported one-config-per-protocol shape [0.03ms]
+
+tests/configTabsAccessibility.test.ts:
+(pass) ConfigTabs accessibility > announces validation errors and unsaved changes in the tab name [16.29ms]
+
+tests/timezoneLabel.test.ts:
+(pass) formatUtcOffsetLabel > renders whole-hour offsets east and west of UTC [2.56ms]
+(pass) formatUtcOffsetLabel > renders half- and quarter-hour offsets [0.07ms]
+(pass) formatUtcOffsetLabel > UTC itself carries no sign [0.02ms]
+(pass) formatUtcOffsetLabel > a non-finite offset degrades to a bare GMT rather than "GMT+NaN" [0.01ms]
+(pass) resolveTimeZoneLabel > produces a well-formed label whatever timezone the runner is in [4.14ms]
+(pass) resolveTimeZoneLabel > reflects the offset of the instant it is given, not of "now" [0.07ms]
+(pass) Asia/Shanghai hardcode > is gone from the reset-credit module [0.02ms]
+(pass) Asia/Shanghai hardcode > the expiry heading interpolates a timezone in all four locales [1.44ms]
+
+tests/sidebarShortcut.test.ts:
+(pass) Sidebar Shortcut Logic > isSidebarToggleShortcut > matches metaKey + b (Mac Cmd+B) [0.06ms]
+(pass) Sidebar Shortcut Logic > isSidebarToggleShortcut > matches ctrlKey + b (Windows/Linux Ctrl+B) [0.02ms]
+(pass) Sidebar Shortcut Logic > isSidebarToggleShortcut > rejects without metaKey or ctrlKey
+(pass) Sidebar Shortcut Logic > isSidebarToggleShortcut > rejects keys other than b/B [0.01ms]
+(pass) Sidebar Shortcut Logic > isSidebarToggleShortcut > ignores when target is an input, textarea, or contentEditable element [0.04ms]
+(pass) Sidebar Shortcut Logic > getSidebarShortcutLabel > returns ⌘B for Mac and Ctrl+B for non-Mac [0.02ms]
+
+tests/quotaUiState.test.ts:
+(pass) quota ui state > round-trips both preferences [1.01ms]
+(pass) quota ui state > writing one preference preserves the other [0.04ms]
+(pass) quota ui state > rejects values that are not part of the current contract [0.05ms]
+(pass) quota ui state > survives absent, malformed, and non-object payloads [0.07ms]
+
+tests/apiKeyStrengthMeter.test.ts:
+(pass) ApiKeyStrengthMeter > exposes the tier through the progressbar [3.76ms]
+(pass) ApiKeyStrengthMeter > empty input lights nothing and shows a placeholder label [0.56ms]
+(pass) ApiKeyStrengthMeter > segments cascade only over the newly lit ones [0.09ms]
+(pass) ApiKeyStrengthMeter > every tier label is translated in all locales [2.11ms]
+
+tests/xaiPaidQuotaFallback.test.ts:
+(pass) xAI paid OAuth quota fallback > recognizes paid credentials without trusting individual route hints [1.40ms]
+(pass) xAI paid OAuth quota fallback > skips free billing endpoints for a recognized paid list entry [0.59ms]
+(pass) xAI paid OAuth quota fallback > keeps existing billing behavior when only one route hint is present [0.92ms]
+(pass) xAI paid OAuth quota fallback > falls back to paid health after both free billing probes fail [0.34ms]
+(pass) xAI paid OAuth quota fallback > preserves the billing error when the paid fallback also fails [0.15ms]
+
+tests/claudeFingerprintProfile.test.ts:
+(pass) Claude fingerprint profile > normalizes the backend field and exposes the CLI profile resource flag [0.59ms]
+(pass) Claude fingerprint profile > serializes the opt-in profile when creating a Claude key [0.37ms]
+(pass) Claude fingerprint profile > clears the profile and deprecated CCH field when saving caller-owned mode [0.27ms]
+
+tests/sponsorCustomEndpoint.test.ts:
+(pass) sponsor custom endpoint isolation > keeps APIKEY.FUN-named custom endpoints in the generic OpenAI group [0.28ms]
+(pass) sponsor custom endpoint isolation > keeps Code0-named custom endpoints in the generic OpenAI group [0.16ms]
+(pass) sponsor custom endpoint isolation > keeps Qiniu-named custom endpoints in the generic OpenAI group [0.10ms]
+(pass) sponsor custom endpoint isolation > keeps same-name custom entries outside sponsor delete targets [0.14ms]
+(pass) sponsor custom endpoint isolation > keeps backend indexes when normalization filters an unnamed item [0.33ms]
+(pass) sponsor custom endpoint isolation > still aggregates each sponsor official OpenAI endpoint [0.06ms]
+
+tests/interactionsApiProvider.test.ts:
+(pass) Interactions API key provider > normalizes the backend contract and exposes a dedicated workbench resource [0.48ms]
+(pass) Interactions API key provider > builds the native interactions endpoint from supported base URL forms [0.15ms]
+(pass) Interactions API key provider > uses the documented revision and minimal non-streaming probe body [0.03ms]
+(pass) Interactions API key provider > maps the UI brand to the backend runtime usage provider [0.03ms]
+(pass) Interactions API key provider > updates only the matching key and base URL while preserving unknown fields [0.37ms]
+(pass) Interactions API key provider > creates and deletes keys through the interactions management endpoints [0.50ms]
+
+tests/quotaCardActions.test.ts:
+(pass) quota management card actions > keeps refresh quota as the only card action [1.25ms]
+(pass) quota management card actions > does not wire a reset callback into the quota management page [0.22ms]
+(pass) quota management card actions > keeps reset support scoped to the auth-file page [0.19ms]
+
+tests/excludedModelRuleMatching.test.ts:
+(pass) getModelExclusionState > included when no rule touches the model [0.09ms]
+(pass) getModelExclusionState > exact when only a literal rule matches [0.02ms]
+(pass) getModelExclusionState > wildcard carries the responsible rule so the row can explain itself [0.07ms]
+(pass) getModelExclusionState > both when a model is explicitly picked AND caught by a wildcard [0.02ms]
+(pass) getModelExclusionState > order of the rules does not change the resolved state [0.02ms]
+(pass) getModelExclusionState > reports the first matching wildcard when several apply [0.02ms]
+(pass) getModelExclusionState > matching is case-insensitive in both directions [0.02ms]
+(pass) getModelExclusionState > a blank model id is never excluded
+(pass) getModelExclusionState > isModelExcluded collapses all three excluded variants [0.05ms]
+(pass) matchedModelsByRule > reports what each rule actually catches, in catalog order [0.08ms]
+(pass) matchedModelsByRule > a rule matching nothing is reported with a zero count, not omitted [0.04ms]
+(pass) matchedModelsByRule > an exact rule matches exactly its own model [0.04ms]
+(pass) matchedModelsByRule > overlapping rules each report the full set they catch [0.20ms]
+(pass) matchedModelsByRule > preserves the given rule order and length [0.28ms]
+(pass) summarizeExclusion > counts catalog models hit by any rule, not the rules themselves [0.09ms]
+(pass) summarizeExclusion > a model caught by both an exact and a wildcard rule counts once [0.04ms]
+(pass) summarizeExclusion > rules that match nothing in the catalog do not inflate the count [0.05ms]
+(pass) summarizeExclusion > available is always total minus excluded [0.15ms]
+(pass) summarizeExclusion > an empty catalog yields all zeroes rather than NaN [0.04ms]
+(pass) summarizeExclusion > no rules means nothing excluded [0.04ms]
+
+tests/pluginConfigDraft.test.ts:
+(pass) plugin config draft > represents arrays as JSON without marking missing booleans as touched [0.14ms]
+(pass) plugin config draft > only patches touched base fields and preserves untouched plugin values [0.33ms]
+(pass) plugin config draft > parses touched array JSON without coercing item types [0.09ms]
+(pass) plugin config draft > writes a missing boolean only after the user touches it [0.02ms]
+(pass) plugin config draft > deletes a cleared touched field with null [0.03ms]
+(pass) plugin config draft > rejects non-array JSON for an array field [0.05ms]
+
+tests/quotaBodyRendering.test.ts:
+(pass) CodexQuotaBody > renders a window reset as absolute plus countdown [4.32ms]
+(pass) CodexQuotaBody > renders reset-credit expiry in local time with a countdown [0.97ms]
+(pass) CodexQuotaBody > highlights a credit expiring within the final hour [0.90ms]
+(pass) CodexQuotaBody > does not emphasize a reset countdown more than one hour away [0.79ms]
+(pass) CodexQuotaBody > emphasizes a reset countdown within the final hour [1.03ms]
+(pass) CodexQuotaBody > highlights nothing once every instant is in the past [0.65ms]
+(pass) CodexQuotaBody > keeps the baked label alone when the store entry predates resetAtMs [0.54ms]
+(pass) CodexQuotaBody > hides Spark windows while keeping the primary Codex window visible [0.69ms]
+(pass) KimiQuotaBody > renders the concrete reset time alongside its countdown [0.67ms]
+(pass) ClaudeQuotaBody > pairs each window reset with a countdown [0.58ms]
+(pass) AntigravityQuotaBody > keeps Gemini rows and hides the Claude and GPT group [1.39ms]
+(pass) XaiQuotaBody > hides Imagine product usage and monthly credits [2.10ms]
+
+tests/quotaPlanTier.test.ts:
+(pass) resolvePlanTier > elite wins for 'pro' even though it is also in the premium set (order contract) [0.03ms]
+(pass) resolvePlanTier > normalizes case and whitespace before matching [0.02ms]
+(pass) resolvePlanTier > maps every pro-lite spelling to premium [0.03ms]
+(pass) resolvePlanTier > maps ordinary and unknown plans to plain [0.02ms]
+(pass) resolvePlanTier > maps missing values to plain [0.02ms]
+
+tests/kimiProvider.test.ts:
+(pass) Kimi provider > defaults to the domestic OpenAI-compatible, Claude, and Responses endpoints [0.23ms]
+(pass) Kimi provider > offers overseas and domestic URLs and maps the domestic protocol endpoints [0.22ms]
+(pass) Kimi provider > discovers models through the versioned OpenAI endpoint [0.40ms]
+(pass) Kimi provider > uses the domestic registration link for Chinese and the international link otherwise [0.04ms]
+(pass) Kimi provider > uses the OAuth-style theme surface for its provider icon [0.02ms]
+(pass) Kimi provider > is the first provider in the catalog
+(pass) Kimi provider > recognizes Kimi configs only by supported protocol endpoint [0.12ms]
+(pass) Kimi provider > aggregates only the Kimi OpenAI-compatible, Claude, and Responses configs [0.18ms]
+
+tests/providerRecentRequestsIsolation.test.ts:
+(pass) provider recent request cache isolation > creates a fresh cache when the backend or management key changes [0.07ms]
+(pass) provider recent request cache isolation > reuses the cache only within the same connection scope [0.02ms]
+
+tests/authFileProblemStatus.test.ts:
+(pass) auth file problem status > does not classify a deliberately disabled credential as a problem [0.06ms]
+(pass) auth file problem status > also respects the backend disabled status when the boolean is absent [0.02ms]
+(pass) auth file problem status > ignores healthy status messages [0.04ms]
+(pass) auth file problem status > detects warning messages, unavailable credentials, and error status [0.03ms]
+
+tests/visualConfigAntigravitySensitiveWords.test.ts:
+(pass) visual config Antigravity sensitive words > loads antigravity.sensitive-words from YAML [16.09ms]
+(pass) visual config Antigravity sensitive words > writes trimmed values and preserves other Antigravity settings [7.05ms]
+(pass) visual config Antigravity sensitive words > removes an empty Antigravity block after clearing the list [3.28ms]
+
+tests/providerConcurrency.test.ts:
+(pass) provider list concurrency > preserves concurrent additions while appending a provider [0.05ms]
+(pass) provider list concurrency > replaces only the selected provider in the latest list [0.04ms]
+
+tests/quotaClassContract.test.ts:
+(pass) quota class contract > QuotaBody.module.scss defines every QuotaClassMap key [0.64ms]
+(pass) quota class contract > AuthFileQuota.module.scss defines every QuotaClassMap key [0.41ms]
+(pass) quota class contract > bindQuotaClasses reports every missing key rather than the first [0.53ms]
+(pass) quota class contract > bindQuotaClasses returns exactly the contract keys [0.12ms]
+
+tests/xaiApiKeyProvider.test.ts:
+(pass) xAI API key provider > normalizes the backend xai-api-key contract and exposes a workbench resource [0.62ms]
+(pass) xAI API key provider > creates and deletes xAI keys through the backend management contract [0.40ms]
+
+tests/modelAliasValidation.test.ts:
+(pass) model alias validation > checks aliases case-insensitively while excluding the renamed node [0.09ms]
+
+tests/lmuAIProvider.test.ts:
+(pass) LMU AI provider > uses the official URL for all four supported protocols [0.20ms]
+(pass) LMU AI provider > aggregates the four protocol configs without claiming Interactions API [0.68ms]
+(pass) LMU AI provider > keeps custom endpoints outside the LMU AI sponsor group [0.03ms]
+(pass) LMU AI provider > remains in the provider catalog with the sponsor logo [0.03ms]
+
+tests/claudeFableQuota.test.ts:
+(pass) Claude Fable quota > builds a Fable window from the modern scoped limits payload [0.39ms]
+(pass) Claude Fable quota > falls back to the legacy Fable field [0.12ms]
+(pass) Claude Fable quota > falls back to the legacy field when the modern percent is invalid [0.12ms]
+(pass) Claude Fable quota > prefers the active modern field without rendering a duplicate [0.12ms]
+(pass) Claude Fable quota > uses a valid modern candidate when the preferred candidate is invalid [0.13ms]
+(pass) Claude Fable quota > ignores malformed and unrelated limits while preserving standard windows [0.14ms]
+
+tests/configUiState.test.ts:
+(pass) resolveStatus > follows the legacy precedence chain top-down [0.06ms]
+(pass) resolveStatus > validation_blocked short key lives at config_management top level (regression: old .visual. path bug) [0.02ms]
+(pass) resolveStatus > every status resolves label keys that exist in all four locales [2.62ms]
+(pass) countSectionErrors > buckets field errors by section and mirrors common-tab fields [0.16ms]
+(pass) countSectionErrors > payload flag adds one to the payload tab only [0.03ms]
+(pass) countSectionErrors > undefined error entries do not count [0.02ms]
+(pass) countTotalErrors > sums field errors plus the payload flag [0.04ms]
+(pass) resolveDirtyTabs > maps dirty value keys to their canonical sections [0.10ms]
+(pass) resolveDirtyTabs > a common field lights both the common tab and its canonical section [0.04ms]
+(pass) resolveDirtyTabs > unknown keys are ignored instead of crashing [0.02ms]
+(pass) buildHeaderMeta > blocking statuses come directly from the page status machine [0.12ms]
+(pass) buildHeaderMeta > clean state ends with a synced segment [0.03ms]
+(pass) buildHeaderMeta > dirty and errors stack after the field count [0.04ms]
+(pass) buildHeaderMeta > source dirty supersedes the visual dirty count [0.03ms]
+(pass) buildHeaderMeta > yaml error shows without a synced tail [0.02ms]
+(pass) localStorage readers > readSavedMode falls back to visual on unknown values [0.02ms]
+(pass) localStorage readers > readSavedSection falls back to common on stale values [0.04ms]
+
+tests/quotaResetInstants.test.ts:
+(pass) parseIsoToMs > parses a plain ISO timestamp [0.04ms]
+(pass) parseIsoToMs > tolerates over-precise fractional seconds [0.02ms]
+(pass) parseIsoToMs > rejects non-strings, blanks and unparseable text [0.02ms]
+(pass) parseUnixToMs > treats small magnitudes as seconds and large as milliseconds [0.01ms]
+(pass) parseUnixToMs > accepts numeric strings
+(pass) parseUnixToMs > rejects zero, negatives and junk [0.02ms]
+(pass) parseOffsetSecondsToMs > projects a countdown forward from now [0.03ms]
+(pass) parseOffsetSecondsToMs > rejects a non-positive or unparseable offset [0.02ms]
+(pass) resolveResetMs > takes the first parseable candidate, ISO or Unix [0.02ms]
+(pass) resolveResetMs > prefers an earlier candidate over a later one in the list [0.01ms]
+(pass) resolveResetMs > returns null when nothing parses [0.02ms]
+(pass) period derivation > converts a window length in seconds to hours [0.04ms]
+(pass) period derivation > rejects an absent or non-positive window length [0.01ms]
+(pass) period derivation > derives the Claude period from its window key [0.01ms]
+
+tests/apiKeyStrength.test.ts:
+(pass) API key strength > empty input lights no segment [0.04ms]
+(pass) API key strength > segments track the tier index [0.25ms]
+(pass) API key strength > generated keys always reach the top tier [1.03ms]
+(pass) API key strength > short keys are capped regardless of charset richness [0.05ms]
+(pass) API key strength > repeated and sequential runs are discounted [0.08ms]
+(pass) API key strength > periodic keys score like a single period [0.05ms]
+(pass) API key strength > guessable tokens drag the score down [0.03ms]
+(pass) API key strength > longer keys never score below their prefix [0.23ms]
+
+tests/sharedClock.test.ts:
+(pass) createSharedClock > getSnapshot is referentially stable until a tick fires [0.19ms]
+(pass) createSharedClock > notifies every subscriber on a tick [0.06ms]
+(pass) createSharedClock > three subscribers share exactly one timer [0.04ms]
+(pass) createSharedClock > clears the timer when the last subscriber leaves, and restarts after [0.07ms]
+(pass) createSharedClock > resynchronizes on the first subscribe so an idle clock is not stale [0.03ms]
+(pass) createSharedClock > unsubscribing twice does not clear a fresh timer [0.03ms]
+
+tests/infistarProvider.test.ts:
+(pass) Infistar sponsor provider > offers the requested mainland China and global URLs [0.14ms]
+(pass) Infistar sponsor provider > maps both choices to all four supported protocol endpoints [0.22ms]
+(pass) Infistar sponsor provider > aggregates four protocol configs without claiming Interactions API [0.50ms]
+(pass) Infistar sponsor provider > keeps custom endpoints outside the Infistar sponsor group [0.11ms]
+(pass) Infistar sponsor provider > is appended to the provider catalog with the supplied logo [0.12ms]
+
+tests/dashboardMetrics.test.ts:
+(pass) formatCompactNumber > leaves values below one thousand alone [0.08ms]
+(pass) formatCompactNumber > compacts with a single decimal and no redundant .0 [0.05ms]
+(pass) formatCompactNumber > carries into the next tier instead of rendering 1000K [0.02ms]
+(pass) formatCompactNumber > keeps the sign and survives non-finite input [0.01ms]
+(pass) formatPercent > trims trailing zeros but keeps meaningful decimals [0.06ms]
+(pass) formatPercent > renders an em dash for non-finite rates
+(pass) niceCeil > rounds up onto the step ladder [0.08ms]
+(pass) niceCeil > never returns zero, so bar heights cannot divide by zero [0.01ms]
+(pass) axisMax > lands every gridline on a whole number [0.05ms]
+(pass) axisMax > keeps the axis just above the peak [0.07ms]
+(pass) axisMax > degrades safely with no traffic [0.01ms]
+(pass) toneForSuccessRate > maps a rate onto a severity band [0.03ms]
+(pass) splitWindowMinutes > splits the rolling window into hours and minutes [0.05ms]
+(pass) provider key counts > includes native Interactions API keys in the dashboard total inputs [0.06ms]
+(pass) providerLabel > uses the brand spelling for known providers [0.04ms]
+(pass) providerLabel > falls back to a capitalised id, and localises unknown [0.02ms]
+
+tests/oauthConfigLoadGuard.test.ts:
+(pass) OAuth configuration load guards > disables excluded-model writes and exposes retry after a load failure [1.06ms]
+(pass) OAuth configuration load guards > disables model-alias writes and exposes retry after a load failure [0.92ms]
+
+tests/authFilesResponseNormalization.test.ts:
+(pass) auth-files response normalization > normalizes WRR weights while preserving zero and negative values [1.63ms]
+(pass) auth-files response normalization > omits missing, fractional, and unsafe WRR weights from the normalized field [0.15ms]
+(pass) auth-files response normalization > applies the same safe-integer normalization to priority [0.06ms]
+(pass) auth-files response normalization > surfaces the trimmed account email [0.04ms]
+(pass) auth-files response normalization > leaves an empty backend email as the raw empty string [0.03ms]
+(pass) auth-files response normalization > normalizes project_id to projectId while keeping the raw key [0.04ms]
+(pass) auth-files response normalization > recovers a non-empty email from the lower-priority duplicate entry [0.16ms]
+(pass) auth-files response normalization > prefers the higher-scored entry when both emails are non-empty and differ [0.05ms]
+(pass) auth-files response normalization > passes account through raw without deriving a camelCase field [0.03ms]
+
+tests/quotaTimelineRendering.test.ts:
+(pass) QuotaTimeline rendering > renders separate all-models and Fable bars under one Claude credential [5.24ms]
+(pass) QuotaTimeline rendering > shows the selected period date instead of always labelling it Today [1.66ms]
+(pass) QuotaTimeline rendering > keeps the panel and controls visible when 5-hour mode has no matching lanes [0.88ms]
+(pass) QuotaTimeline rendering > renders a Kimi 5-hour lane from the protobuf-style time unit [2.36ms]
+(pass) QuotaTimeline rendering > renders an unexpired Codex reset credit as an expiry tick [1.89ms]
+(pass) QuotaTimeline rendering > renders the pinned Grok Sep 12 reset as a manual reset tick [1.50ms]
+(pass) QuotaTimeline rendering > stays hidden before any credential exposes a usable quota window [0.41ms]
+
+tests/visualConfigRoutingStrategy.test.ts:
+(pass) visual config weighted routing strategy > recognizes the weighted-round-robin backend value [0.04ms]
+(pass) visual config weighted routing strategy > writes weighted-round-robin without coercing it to round-robin [1.02ms]
+
+tests/sponsorMutationRecovery.test.ts:
+(pass) sponsor mutation recovery > refreshes after a failed multi-endpoint mutation and preserves the original failure [0.36ms]
+(pass) sponsor mutation recovery > does not let a refresh failure replace the original mutation failure [0.09ms]
+
+tests/providerThinkingConfig.test.ts:
+(pass) provider model thinking config > serializes thinking overrides for Vertex models [0.37ms]
+(pass) provider model thinking config > can clear thinking while preserving unknown model fields [0.32ms]
+
+tests/pluginTrust.test.ts:
+(pass) plugin store trust > trusts only the official source with an official repository [0.16ms]
+
+tests/apiKey.test.ts:
+(pass) API key generation > generates a 51-character key with the expected prefix and charset [0.06ms]
+(pass) API key generation > generates distinct keys [0.64ms]
+
+tests/oauthForceMapping.test.ts:
+(pass) OAuth model alias force mapping > normalizes and serializes force-mapping without dropping it [0.25ms]
+
+tests/apiError.test.ts:
+(pass) Management API error parsing > prefers the human-readable message and preserves the API error code [0.08ms]
+(pass) Management API error parsing > falls back to a string error used by legacy endpoints [0.02ms]
+(pass) Management API error parsing > supports nested error messages and codes [0.01ms]
+(pass) Management API error parsing > uses a text response body before the transport fallback
+(pass) Management API error parsing > uses the transport message for an unknown response shape [0.02ms]
+
+tests/visualConfigConcurrency.test.ts:
+(pass) visual config concurrency > only applies dirty visual fields to the latest server YAML [2.20ms]
+
+tests/quotaPageLogic.test.ts:
+(pass) resolveQuotaProviderType > maps provider aliases and rejects unsupported or disabled files [0.06ms]
+(pass) classifyQuotaFiles > uses the requested top-bar provider order [0.02ms]
+(pass) classifyQuotaFiles > drops unsupported and disabled files [0.08ms]
+(pass) classifyQuotaFiles > orders entries by provider tab order [0.03ms]
+(pass) classifyQuotaFiles — visible provider boundary > excludes Ollama and Kimi from the visible quota surface [0.13ms]
+(pass) buildTabCounts > counts per provider plus an all total, zero-filling empty tabs [0.10ms]
+(pass) filterEntriesByTab > passes everything through on the 'all' tab [0.03ms]
+(pass) filterEntriesByTab > filters to a single provider [0.04ms]
+(pass) isQuotaRefreshDisabled > blocks a single-card refresh while unavailable or loading [0.02ms]
+(pass) paginate > uses the configured 20-item page size [0.06ms]
+(pass) paginate > clamps an out-of-range page instead of returning an empty slice [0.03ms]
+(pass) paginate > keeps at least one page when the list is empty [0.01ms]
+(pass) sortQuotaEntries > default mode preserves order but returns a new array [0.06ms]
+(pass) sortQuotaEntries > orders loaded credentials by how soon they recover, across providers [0.07ms]
+(pass) sortQuotaEntries > sinks credentials with no instant, keeping their provider-grouped order [0.02ms]
+(pass) sortQuotaEntries > leaves the order untouched when nothing has loaded [0.02ms]
+(pass) sortQuotaEntries > breaks ties on the original position, so equal instants stay stable [0.02ms]
+(pass) sortQuotaEntries > does not mutate the input [0.02ms]
+(pass) sortQuotaEntries > sorts before paginating, so the globally soonest lands on page one [0.02ms]
+(pass) buildQuotaCardLabels > uses the provider brand name when a provider has a single card [0.17ms]
+(pass) buildQuotaCardLabels > appends an account hint when one provider has multiple cards [0.12ms]
+(pass) buildQuotaCardLabels > numbering keeps duplicate-account cards distinguishable [0.11ms]
+
+tests/quotaResetSchedule.test.ts:
+(pass) collectQuotaRowInstants > collects every Claude window [0.05ms]
+(pass) collectQuotaRowInstants > collects Codex windows and available reset credits together [0.06ms]
+(pass) collectQuotaRowInstants > ignores reset credits that are not available [0.05ms]
+(pass) collectQuotaRowInstants > collects the xAI weekly window [0.04ms]
+(pass) collectQuotaRowInstants > ignores an xAI monthly summary — a billing cycle is not capacity returning [0.02ms]
+(pass) collectQuotaRowInstants > flattens Antigravity buckets across groups [0.06ms]
+(pass) collectQuotaRowInstants > collects Kimi rows [0.03ms]
+(pass) collectQuotaRowInstants > returns nothing unless the credential loaded successfully [0.08ms]
+(pass) collectQuotaRowInstants > drops rows with no usable instant rather than emitting NaN [0.06ms]
+(pass) collectQuotaRowInstants > drops a reset credit whose expiry will not parse [0.03ms]
+(pass) pickSoonestRowId > picks the nearest upcoming instant [0.02ms]
+(pass) pickSoonestRowId > a credit expiring before every window wins the emphasis [0.03ms]
+(pass) pickSoonestRowId > a window resetting before every credit wins the emphasis [0.02ms]
+(pass) pickSoonestRowId > skips instants that have already passed [0.02ms]
+(pass) pickSoonestRowId > returns null when nothing is pending [0.02ms]
+(pass) pickSoonestRowId > breaks ties deterministically on row id [0.03ms]
+(pass) pickUrgentRowId > highlights only the nearest reset strictly inside the final hour [0.02ms]
+(pass) pickUrgentRowId > does not highlight at exactly one hour or beyond [0.02ms]
+(pass) resetCreditRowId > prefers the credit id [0.01ms]
+(pass) resetCreditRowId > falls back to expiry and index when the payload carries no id [0.01ms]
+(pass) nextRecoveryMs > returns the soonest upcoming instant across windows and credits [0.07ms]
+(pass) nextRecoveryMs > ignores instants already in the past [0.07ms]
+(pass) nextRecoveryMs > is null for an unloaded credential, so sorting can sink it [0.03ms]
+(pass) nextRecoveryMs > is null when every known instant has passed [0.04ms]
+
+tests/providerExcludedModelsDisableRule.test.ts:
+(pass) buildExcludedModels — the "*" disable-rule invariant > appends "*" when disabled [0.18ms]
+(pass) buildExcludedModels — the "*" disable-rule invariant > omits "*" when not disabled [0.02ms]
+(pass) buildExcludedModels — the "*" disable-rule invariant > a hand-typed "*" never duplicates the disable rule [0.02ms]
+(pass) buildExcludedModels — the "*" disable-rule invariant > a hand-typed "*" never switches the provider to disabled
+(pass) buildExcludedModels — the "*" disable-rule invariant > disabled with no rules yields exactly the disable rule [0.02ms]
+(pass) buildExcludedModels — the "*" disable-rule invariant > no rules and not disabled yields undefined, not an empty array [0.01ms]
+(pass) buildExcludedModels — the "*" disable-rule invariant > openaiCompatibility never receives the disable rule [0.02ms]
+
+tests/fennoProvider.test.ts:
+(pass) FennoAI provider aggregation > does not claim OpenAI configs that its form cannot display [0.14ms]
+
+tests/configFieldParity.test.ts:
+(pass) search index integrity > field ids are unique [0.01ms]
+(pass) search index integrity > every entry belongs to a canonical section [0.05ms]
+(pass) search index integrity > label / qualifier / hint keys resolve to strings in en.json [1.12ms]
+(pass) value-key coverage (index ↔ VisualConfigValues) > FIELD_VALUE_KEYS keys are exactly the index field ids [0.07ms]
+(pass) value-key coverage (index ↔ VisualConfigValues) > the union of mapped value keys is exactly the VisualConfigValues leaf keys [0.10ms]
+(pass) JSX anchor parity (source scan) > every index entry is rendered by exactly the section JSX, and vice versa [1.50ms]
+(pass) registry consistency > tab id registry is common + the seven canonical sections [0.03ms]
+(pass) registry consistency > every validation field path lives in exactly one section bucket [0.07ms]
+(pass) registry consistency > validation field paths are real value keys [0.04ms]
+(pass) registry consistency > common tab fields are a subset of the index [0.02ms]
+
+tests/pluginVersionSelection.test.ts:
+(pass) plugin version selection > allows custom versions only for GitHub release installs [0.04ms]
+
+tests/visualConfigDisableImageGeneration.test.ts:
+(pass) visual config disable-image-generation > loads and writes the passthrough mode [1.57ms]
+
+tests/antigravityQuotaCountdown.test.ts:
+(pass) Antigravity quota countdown scheduling > updates at the next rounded-minute boundary [0.12ms]
+(pass) Antigravity quota countdown scheduling > uses the earliest boundary across quota buckets [0.02ms]
+(pass) Antigravity quota countdown scheduling > stops scheduling after all reset times expire [0.01ms]
+
+tests/excludedModelRules.test.ts:
+(pass) normalizeExcludedRules / parseExcludedRulesText > trims, drops blanks, and removes case-insensitive duplicates [0.10ms]
+(pass) normalizeExcludedRules / parseExcludedRulesText > keeps the first spelling of a case-insensitive duplicate [0.02ms]
+(pass) normalizeExcludedRules / parseExcludedRulesText > parsing text is the same operation as normalizing its lines [0.08ms]
+(pass) normalizeExcludedRules / parseExcludedRulesText > handles CRLF line endings [0.02ms]
+(pass) normalizeExcludedRules / parseExcludedRulesText > round-trips through formatExcludedRulesText [0.03ms]
+(pass) normalizeExcludedRules / parseExcludedRulesText > parse→format is a fixed point for already-normalized input (order preserved) [0.03ms]
+(pass) normalizeExcludedRules / parseExcludedRulesText > normalization never reorders surviving rules [0.02ms]
+(pass) matchesExcludedRule > matches backend wildcard semantics case-insensitively [0.04ms]
+(pass) matchesExcludedRule > treats regex metacharacters in the rule as literals [0.04ms]
+(pass) matchesExcludedRule > anchors at both ends [0.02ms]
+(pass) matchesExcludedRule > a blank rule or model never matches [0.01ms]
+(pass) matchesExcludedRule > isWildcardRule / isMatchedByWildcardRule ignore exact rules [0.06ms]
+(pass) hasExcludedRule > compares literally and case-insensitively, without wildcard expansion [0.05ms]
+(pass) toggleExcludedRule > adds and removes exact rules without touching wildcard rules [0.05ms]
+(pass) toggleExcludedRule > removes a wildcard rule by name (the old auth-file helper refused to) [0.01ms]
+(pass) toggleExcludedRule > adding an existing rule moves it to the end rather than duplicating
+(pass) toggleExcludedRule > a blank candidate is a no-op add
+(pass) toggleExcludedRule > trims the candidate when removing, down to an empty list
+(pass) toggleExcludedRule > trims the candidate when adding [0.01ms]
+(pass) splitExcludedRules > partitions into exact / wildcard / unknown [0.09ms]
+(pass) splitExcludedRules > rewrites exact rules to the catalog spelling [0.02ms]
+(pass) splitExcludedRules > preserves the configured spelling for wildcard and unknown rules [0.02ms]
+(pass) splitExcludedRules > customRules keeps the original interleaved order, not bucket order [0.02ms]
+(pass) splitExcludedRules > an empty catalog makes every exact rule unknown [0.03ms]
+(pass) replaceCustomExcludedRules > swaps the custom half while retaining exact selections [0.04ms]
+(pass) replaceCustomExcludedRules > clearing the text leaves only the exact selections [0.06ms]
+(pass) replaceCustomExcludedRules > a custom rule duplicating an exact selection does not double it [0.02ms]
+
+tests/kimiQuotaOrder.test.ts:
+(pass) Kimi quota ordering > shows the 5-hour limit before the weekly limit and exposes it to the timeline [0.28ms]
+(pass) Kimi quota reset formatting > converts reset durations longer than a day to days and hours [0.07ms]
+(pass) Kimi quota reset formatting > keeps hour and minute formatting for durations shorter than a day [0.02ms]
+(pass) Kimi quota reset formatting > shows less than one minute for short positive durations [0.02ms]
+
+tests/thinkingLevels.test.ts:
+(pass) standard thinking level selector > only exposes levels recognized by the backend [0.02ms]
+(pass) standard thinking level selector > reads standard levels and legacy capability flags [0.11ms]
+(pass) standard thinking level selector > writes canonical backend levels and omits an empty selection [0.07ms]
+
+tests/credentialWeight.test.ts:
+(pass) credential weight validation > accepts the default range and non-positive scheduling exclusions [0.09ms]
+(pass) credential weight validation > rejects non-integers and values above the backend maximum [0.03ms]
+(pass) credential weight validation > reads only valid numeric response fields [0.02ms]
+
+tests/visualConfigValidation.test.ts:
+(pass) visual config validation > requires Redis usage retention to be empty or within 1..3600 [0.12ms]
+
+tests/quotaRelativeTime.test.ts:
+(pass) relativeTimeParts > picks the coarsest unit that still describes the gap [0.04ms]
+(pass) relativeTimeParts > never renders a magnitude that should have been the next unit up [0.02ms]
+(pass) relativeTimeParts > truncates, so a deadline never appears further off than it is [0.02ms]
+(pass) relativeTimeParts > past instants are negative rather than clamped to zero [0.01ms]
+(pass) relativeTimeParts > sub-minute magnitudes floor to 1 in both directions [0.03ms]
+(pass) formatRelativeInstant > renders in the requested locale [0.95ms]
+(pass) formatRelativeInstant > distinguishes past from future [0.07ms]
+(pass) formatRelativeInstant > falls back instead of throwing on an unusable locale tag [0.23ms]
+(pass) formatInstantShort > matches the shape the baked reset labels already use [0.15ms]
+(pass) formatInstantShort > degrades to a dash rather than "Invalid Date" [0.02ms]
+(pass) buildResetDisplay > pairs a baked absolute label with a computed relative one [0.04ms]
+(pass) buildResetDisplay > keeps the baked label alone when the instant is missing [0.03ms]
+(pass) buildResetDisplay > derives the absolute half from the instant when no label was baked [0.13ms]
+(pass) buildResetDisplay > returns null when there is nothing to render [0.03ms]
+(pass) buildResetDisplay > treats a placeholder label with a real instant as renderable [0.09ms]
+(pass) buildResetDisplay > rejects a non-finite instant [0.02ms]
+
+tests/authFileWeight.test.ts:
+(pass) auth-file credential weight patch > writes numeric weight and uses null to restore the default [0.30ms]
+(pass) auth-file credential weight patch > recognizes a numeric string in an existing auth file [0.03ms]
+(pass) auth-file credential weight patch > rejects invalid and oversized values before PATCH [0.05ms]
+(pass) auth-file disable cooling patch > reads canonical and legacy boolean-compatible metadata [0.07ms]
+(pass) auth-file disable cooling patch > writes the canonical field when enabling the per-credential override [0.04ms]
+(pass) auth-file disable cooling patch > preserves the legacy field name and writes false when disabling it [0.03ms]
+(pass) auth-file disable cooling patch > does not patch an untouched or unchanged override [0.03ms]
+(pass) auth-file excluded models patch > writes normalized model patterns to the canonical field [0.11ms]
+(pass) auth-file excluded models patch > preserves the legacy hyphenated field name [0.03ms]
+(pass) auth-file excluded models patch > clears exclusions with an empty array and ignores untouched values [0.07ms]
+
+tests/quotaTimeline.test.ts:
+(pass) windowsIn > projects backwards and forwards from the anchor [0.10ms]
+(pass) windowsIn > covers the whole span with no gaps or overlaps [0.04ms]
+(pass) windowsIn > rejects a degenerate period, span or anchor [0.03ms]
+(pass) windowsIn > bails out rather than looping forever on an absurd period [0.02ms]
+(pass) span boundaries > startOfDay and startOfWeek land on local midnight [0.03ms]
+(pass) span boundaries > weekly span is a fortnight from the containing Sunday [0.03ms]
+(pass) span boundaries > offsets step a week in weekly mode and a day in session mode [0.04ms]
+(pass) span boundaries > spans a whole number of days even across a DST transition [0.03ms]
+(pass) projectLane > classifies past, live and next windows against now [0.24ms]
+(pass) projectLane > does not carry stale remaining usage past the reported reset [0.12ms]
+(pass) projectLane > clips bars to the visible span [0.06ms]
+(pass) projectLane > returns nothing when the lane has no anchor or period [0.04ms]
+(pass) projectLane > session mode projects only real 5-hour windows [0.09ms]
+(pass) projectLane > projects only unexpired reset credits inside the visible span [0.06ms]
+(pass) pickLaneWindow > ignores windows with no reset instant [0.02ms]
+(pass) pickLaneWindow > prefers the longest window that fits the span, not the soonest reset [0.03ms]
+(pass) pickLaneWindow > breaks a period tie on the soonest reset [0.02ms]
+(pass) pickLaneWindow > falls back to the shortest available rather than drawing nothing [0.01ms]
+(pass) pickLaneWindow > returns null when nothing qualifies [0.02ms]
+(pass) buildTimelineLane > claude/codex: anchors on the span-appropriate window, remaining from used [0.11ms]
+(pass) buildTimelineLane > keeps the canonical fable row in the Claude reset timeline [0.06ms]
+(pass) buildTimelineLane > builds a second weekly timeline bar for Fable directly after Claude [1.09ms]
+(pass) buildTimelineLane > codex: keeps the weekly lane on the account quota instead of Spark quota [0.29ms]
+(pass) buildTimelineLane > codex: includes available reset credits with parseable expiry dates [0.18ms]
+(pass) buildTimelineLane > kimi: derives remaining from raw used/limit counts [0.08ms]
+(pass) buildTimelineLane > antigravity anchors on its bucket reset, with remaining from the fraction [0.12ms]
+(pass) buildTimelineLane > antigravity buckets without a parseable reset do not anchor the lane [0.03ms]
+(pass) buildTimelineLane > xai anchors on the weekly limit, with per-product limits [0.07ms]
+(pass) buildTimelineLane > xai: monthly period produces no window; unknown period with usable reset creates a lane [0.05ms]
+(pass) buildTimelineLane > xai: every Grok lane carries the pinned Sep 12 rate-limit reset credit [0.07ms]
+(pass) buildTimelineLane > xai defaults to a 7-day period when the payload states no start [0.16ms]
+(pass) buildTimelineLane > laneHasWindow drops only lanes that can never draw a bar [0.14ms]
+(pass) buildTimelineLane > providers with no usable reset produce an empty lane, not a dropped one [0.24ms]
+(pass) buildTimelineLane > unloaded or errored quota produces an empty lane [5.33ms]
+(pass) buildTimelineLane > windows without a reset instant do not anchor the lane [0.11ms]
+
+tests/oauthEditorDirtyState.test.ts:
+(pass) OAuth editor dirty state > compares model selections independent of order [0.12ms]
+(pass) OAuth editor dirty state > ignores generated row ids but preserves partial alias edits [0.09ms]
+(pass) OAuth editor dirty state > marks provider or content changes as dirty [0.04ms]
+
+tests/ollamaQuota.test.ts:
+(pass) buildOllamaQuotaRows > maps every window to a percent row in source order [0.15ms]
+(pass) buildOllamaQuotaRows > remaining derived by the shared row formula matches the real meter [0.04ms]
+(pass) buildOllamaQuotaRows > carries reset instant and window length for the timeline lane [0.03ms]
+(pass) buildOllamaQuotaRows > drops windows with no reading instead of rendering them as full [0.03ms]
+(pass) buildOllamaQuotaRows > accepts numeric strings, which is how JSON meters often arrive [0.03ms]
+(pass) buildOllamaQuotaRows > clamps an over-subscribed meter into the 0..100 band [0.02ms]
+(pass) buildOllamaQuotaRows > tolerates an empty or missing payload [0.02ms]
+(pass) buildOllamaQuotaRows > falls back to a readable label for an unknown window id [0.02ms]
+
+tests/codexQuota.test.ts:
+(pass) Codex current usage payload > parses the proxied JSON body and classifies both primary weekly windows [0.91ms]
+(pass) Codex current usage payload > shows reset support when total credits remain but none currently apply [0.14ms]
+(pass) Codex current usage payload > keeps reset support for legacy payloads without applicable count [0.02ms]
+
+tests/providerWeightTransformers.test.ts:
+(pass) provider credential weight normalization > reads weight for direct API key credentials [0.09ms]
+(pass) provider credential weight normalization > reads per-key weight for OpenAI-compatible providers [0.06ms]
+(pass) provider credential weight normalization > removes a cleared Vertex weight while preserving unknown fields [0.21ms]
+(pass) provider credential weight normalization > writes and clears nested OpenAI-compatible key weights [0.32ms]
+
+tests/xaiUsingApiAuthFile.test.ts:
+(pass) xAI auth-file using_api > is only exposed for xAI credentials [0.04ms]
+(pass) xAI auth-file using_api > reads boolean-compatible values and defaults to chat-proxy mode [0.03ms]
+(pass) xAI auth-file using_api > writes an explicit using_api boolean [0.03ms]
+
+tests/authFilesListLogic.test.ts:
+(pass) buildWildcardSearch > returns null when the term has no wildcard [0.05ms]
+(pass) buildWildcardSearch > stays unanchored — segments may match anywhere in the value [0.07ms]
+(pass) buildWildcardSearch > escapes regex metacharacters in the segments [0.06ms]
+(pass) buildWildcardSearch > a lone wildcard matches everything [0.03ms]
+(pass) matchesAuthFileSearch > an empty term matches every file [0.07ms]
+(pass) matchesAuthFileSearch > matches the file name case-insensitively [0.05ms]
+(pass) matchesAuthFileSearch > matches the type and the provider [0.03ms]
+(pass) matchesAuthFileSearch > finds a kimi credential by account email even though its name carries none [0.02ms]
+(pass) matchesAuthFileSearch > matches the project id [0.01ms]
+(pass) matchesAuthFileSearch > searches the email on the wildcard path too [0.02ms]
+(pass) matchesAuthFileSearch > never matches the account field — it can be a raw API key [0.01ms]
+(pass) matchesAuthFileSearch > tolerates missing fields
+(pass) sortAuthFiles > 'default' orders by provider then name [0.13ms]
+(pass) sortAuthFiles > 'az' orders by the displayed primary row, not by the file name [0.08ms]
+(pass) sortAuthFiles > 'az' falls back to the file name when primaries are equal [0.04ms]
+(pass) sortAuthFiles > 'az' mixes account primaries and file-name fallbacks coherently [0.05ms]
+(pass) sortAuthFiles > 'priority' orders descending, treats missing values as 0 and stays stable on ties [0.04ms]
+(pass) sortAuthFiles > returns a new array and leaves the input untouched [0.04ms]
+(pass) sortAuthFiles > an unknown mode returns an unsorted copy [0.02ms]
+
+tests/quotaSessionIsolation.test.ts:
+(pass) quota cache session isolation > prevents an earlier connection from committing after the cache is cleared [0.14ms]
+(pass) quota cache session isolation > allows the current connection generation to commit [0.03ms]
+(pass) quota cache session isolation > clears same-name quota and rejects an in-flight commit after auth mutation [0.12ms]
+
+ 457 pass
+ 0 fail
+ 1448 expect() calls
+Ran 457 tests across 66 files. [648.00ms]
+$ eslint . --ext ts,tsx --report-unused-disable-directives
+$ tsc && vite build
+vite v8.1.4 building client environment for production...
+[2Ktransforming...✓ 835 modules transformed.
+rendering chunks...
+[plugin vite:singlefile]
+
+[plugin vite:singlefile] Inlining: index-BXlBdF0r.js
+[plugin vite:singlefile] Inlining: style-BrNk8iVx.css
+computing gzip size...
+dist/index.html  2,849.59 kB │ gzip: 983.53 kB
+
+✓ built in 2.03s

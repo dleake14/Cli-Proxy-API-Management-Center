@@ -1,0 +1,297 @@
+{
+  "schema": "deliverable-gate-report/v1",
+  "contract": "/home/david/forks/cpamc/artifacts/cpamc/provider-timeline-colors-20260907/cpamc-change.deliverable.json",
+  "contract_title": "CPAMC provider timeline colors",
+  "kind": "markdown_doc",
+  "artifact": "/home/david/forks/cpamc/artifacts/cpamc/provider-timeline-colors-20260907/cpamc-change.md",
+  "artifact_bytes": 859,
+  "backend": null,
+  "generated_at": "2026-09-07T15:08:10-05:00",
+  "verdict": "PASS-WITH-SKIPS",
+  "counts": {
+    "pass": 12,
+    "fail": 0,
+    "warn": 0,
+    "skip": 27,
+    "waived": 0
+  },
+  "blocking": [],
+  "checks": [
+    {
+      "id": "contract_substance",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "contract declares coverage scope and/or numeric floors"
+    },
+    {
+      "id": "artifact_exists",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "primary artifact exists, 859 bytes",
+      "evidence": {
+        "path": "/home/david/forks/cpamc/artifacts/cpamc/provider-timeline-colors-20260907/cpamc-change.md",
+        "bytes": 859
+      }
+    },
+    {
+      "id": "artifact_type",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "markdown_doc magic/type matches primary artifact: /home/david/forks/cpamc/artifacts/cpamc/provider-timeline-colors-20260907/cpamc-change.md"
+    },
+    {
+      "id": "source_exists",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "source exists and is non-empty: /home/david/forks/cpamc/artifacts/cpamc/provider-timeline-colors-20260907/cpamc-change.json"
+    },
+    {
+      "id": "supporting_exist",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "4 supporting artifacts exist",
+      "evidence": {
+        "missing": []
+      }
+    },
+    {
+      "id": "dataset_parses",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "record_floor",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "required_fields",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "field_completeness",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "text_extracted",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "non-empty text extracted (126 words)",
+      "evidence": {
+        "words": 126
+      }
+    },
+    {
+      "id": "coverage_must_cover",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "all 8 required terms present",
+      "evidence": {
+        "missing": [],
+        "total": 8,
+        "covered": 8
+      }
+    },
+    {
+      "id": "coverage_sections",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "coverage_depth",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "all 8 covered-term regions meet 1-word floor",
+      "evidence": {
+        "regions": {
+          "CPAMC": 122,
+          "Claude": 58,
+          "Fable": 58,
+          "Grok": 58,
+          "Codex": 58,
+          "light": 58,
+          "dark": 58,
+          "rollback": 64
+        },
+        "floor": 1
+      }
+    },
+    {
+      "id": "required_sections",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "must_answer",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "pages_in_range",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "word_floor",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "word count: 126 (required 90)",
+      "evidence": {
+        "actual": 126,
+        "required": 90
+      }
+    },
+    {
+      "id": "section_word_floor",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "chart_floor",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "supporting_images_nonblank",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "all 1 images meet 0.004 ink-coverage floor",
+      "evidence": {
+        "images": [
+          {
+            "path": "proof/provider-timeline-colors.png",
+            "coverage": 0.15417743324720068,
+            "pixel_hash": "aaf5278517f60d5e2c4dc2f43210b18498f1d6993592014c40035f5145dd190e"
+          }
+        ],
+        "min_image_ink": 0.004
+      }
+    },
+    {
+      "id": "supporting_images_distinct",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "fewer than two images decoded"
+    },
+    {
+      "id": "table_floor",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "table_row_floor",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "table_stretch",
+      "tier": "WARN",
+      "status": "SKIP",
+      "detail": "superseded by table_column_fill, which measures per-column slack instead of whole-table width"
+    },
+    {
+      "id": "table_column_fill",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "per-column table measurement applies only to pdf_report"
+    },
+    {
+      "id": "page_fill_declared",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "page-fill declaration applies only to pdf_report"
+    },
+    {
+      "id": "blank_pages",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "page_bottom_fill",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "page-fill applies only to pdf_report"
+    },
+    {
+      "id": "page_interior_fill",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "page-fill applies only to pdf_report"
+    },
+    {
+      "id": "solid_pages",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "forbidden_tokens",
+      "tier": "FAIL",
+      "status": "PASS",
+      "detail": "no forbidden tokens found"
+    },
+    {
+      "id": "no_network_assets",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "local_assets_exist",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "numeric_decimals",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "has_date",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "sources_section",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "no_truncation",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "dangling_paragraphs",
+      "tier": "FAIL",
+      "status": "SKIP",
+      "detail": "not requested"
+    },
+    {
+      "id": "contract_freshness",
+      "tier": "WARN",
+      "status": "PASS",
+      "detail": "artifact mtime is fresh contract by more than 60 seconds"
+    }
+  ]
+}

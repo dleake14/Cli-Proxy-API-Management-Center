@@ -296,6 +296,8 @@ interface XaiBillingLike {
   usagePercent?: number | null;
   resetAtMs?: number | null;
   periodHours?: number | null;
+  periodEnd?: string;
+  mode?: string;
   productUsage?: { product?: string; usagePercent?: number | null }[];
 }
 
@@ -411,25 +413,43 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
 
   if (provider === 'xai') {
     const billing = (quota as { billing?: XaiBillingLike | null }).billing;
-    // Only the weekly limit is a quota window. The monthly figure on the same
-    // summary is a billing cycle — a spend cap rolling over, not rate-limited
-    // capacity coming back — so an account without a weekly limit contributes
-    // no lane rather than a lane that means something different from the rest.
-    if (!billing || billing.periodType !== 'weekly') return empty;
-    if (typeof billing.resetAtMs !== 'number' || !Number.isFinite(billing.resetAtMs)) return empty;
+    if (!billing) return empty;
+
+    // Derive the reset instant: prefer resetAtMs, fall back to periodEnd.
+    const resetMs =
+      typeof billing.resetAtMs === 'number' && Number.isFinite(billing.resetAtMs)
+        ? billing.resetAtMs
+        : billing.periodEnd
+          ? new Date(billing.periodEnd).getTime()
+          : null;
+    const hasUsableReset = resetMs !== null && Number.isFinite(resetMs);
+
+    // Only weekly period is a genuine quota window. Monthly is a billing
+    // cycle — a spend cap rolling over, not rate-limited capacity coming
+    // back — so drop monthly lanes entirely.
+    if (billing.periodType === 'monthly') return empty;
+
+    // One-time Grok rate limit reset credit expiring Sep 12, 2026.
+    // The xAI billing API has no field for this grant (it is not part of the
+    // weekly window), so it is pinned here so the timeline can show it.
+    // Remove once the credit is consumed or expires.
+    const syntheticResetCredits: TimelineResetCredit[] = [
+      {
+        id: 'grok:rate-limit-reset',
+        grantedAtMs: null,
+        // Sep 12, 2026 00:00 CST = 2026-09-12 06:00:00 UTC
+        expiresAtMs: new Date('2026-09-12T06:00:00Z').getTime(),
+      },
+    ];
 
     const remaining =
       typeof billing.usagePercent === 'number' ? clampPercent(100 - billing.usagePercent) : null;
 
     return {
       ...empty,
-      anchorMs: billing.resetAtMs,
-      // A payload that states an end without a start can't derive its own
-      // length; weekly is what `periodType` already told us.
-      periodHours: billing.periodHours ?? 24 * 7,
+      anchorMs: hasUsableReset ? resetMs : null,
+      periodHours: hasUsableReset ? (billing.periodHours ?? 24 * 7) : null,
       remaining,
-      // Per-product usage is the closest analogue to the other providers'
-      // per-window breakdown.
       limits: (billing.productUsage ?? [])
         .map((entry) => ({
           label: entry.product ?? '',
@@ -437,6 +457,7 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
             typeof entry.usagePercent === 'number' ? clampPercent(100 - entry.usagePercent) : null,
         }))
         .filter((limit): limit is TimelineLimit => limit.remaining !== null),
+      resetCredits: [...empty.resetCredits, ...syntheticResetCredits],
     };
   }
 
@@ -490,4 +511,37 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
   }
 
   return empty;
+}
+
+/**
+ * Build every visible lane owned by one credential.
+ *
+ * Claude's Fable allowance is an independent weekly window. It shares the
+ * credential card, but it must not disappear into the all-models summary in
+ * the reset timeline. Keep it directly below the account lane as its own bar.
+ */
+export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
+  if (input.provider !== 'claude' || (input.maxPeriodHours ?? Infinity) <= SESSION_PERIOD_HOURS) {
+    return [buildTimelineLane(input)];
+  }
+
+  const quota = input.quota as ({ windows?: WindowLike[] } & Record<string, unknown>) | undefined;
+  const fable = quota?.windows?.find((window) => window.id === 'seven-day-fable');
+  if (!fable) return [buildTimelineLane(input)];
+
+  const primary = buildTimelineLane({
+    ...input,
+    quota: {
+      ...quota,
+      windows: quota!.windows?.filter((window) => window.id !== 'seven-day-fable'),
+    } as TimelineLaneInput['quota'],
+  });
+
+  const fableLane = buildTimelineLane({
+    ...input,
+    name: `${input.name}:fable`,
+    displayName: `${input.displayName} · Fable`,
+    quota: { ...quota, windows: [fable] } as TimelineLaneInput['quota'],
+  });
+  return laneHasWindow(fableLane) ? [primary, fableLane] : [primary];
 }

@@ -3,6 +3,7 @@ import {
   DAY_MS,
   HOUR_MS,
   buildTimelineLane,
+  buildTimelineLanes,
   laneHasWindow,
   pickLaneWindow,
   projectLane,
@@ -248,6 +249,13 @@ describe('buildTimelineLane', () => {
       status: 'success',
       windows: [
         { label: '7-day', usedPercent: 93, resetAtMs: later, periodHours: 168 },
+        {
+          id: 'seven-day-fable',
+          label: 'fable',
+          usedPercent: 64,
+          resetAtMs: later,
+          periodHours: 168,
+        },
         { label: '5-hour', usedPercent: 20, resetAtMs: soon, periodHours: 5 },
       ],
     };
@@ -277,8 +285,70 @@ describe('buildTimelineLane', () => {
     // Every limit is still summarized in the lane head regardless of the pick.
     expect(weekly.limits).toEqual([
       { label: '7-day', remaining: 7 },
+      { label: 'fable', remaining: 36 },
       { label: '5-hour', remaining: 80 },
     ]);
+  });
+
+  test('keeps the canonical fable row in the Claude reset timeline', () => {
+    const reset = at(2026, 7, 1, 20);
+    const lane = buildTimelineLane({
+      ...base,
+      provider: 'claude',
+      quota: {
+        status: 'success',
+        windows: [
+          {
+            id: 'seven-day-fable',
+            label: 'fable',
+            usedPercent: 40,
+            resetAtMs: reset,
+            periodHours: 168,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+    expect(lane.limits).toEqual([{ label: 'fable', remaining: 60 }]);
+    expect(lane.anchorMs).toBe(reset);
+  });
+
+  test('builds a second weekly timeline bar for Fable directly after Claude', () => {
+    const reset = at(2026, 7, 1, 20);
+    const lanes = buildTimelineLanes({
+      ...base,
+      provider: 'claude',
+      displayName: 'Claude account',
+      quota: {
+        status: 'success',
+        windows: [
+          {
+            id: 'seven-day',
+            label: 'All models',
+            usedPercent: 20,
+            resetAtMs: reset,
+            periodHours: 168,
+          },
+          {
+            id: 'seven-day-fable',
+            label: 'Fable',
+            usedPercent: 40,
+            resetAtMs: reset,
+            periodHours: 168,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lanes).toHaveLength(2);
+    expect(lanes.map((lane) => lane.displayName)).toEqual([
+      'Claude account',
+      'Claude account · Fable',
+    ]);
+    expect(lanes.map((lane) => lane.remaining)).toEqual([80, 60]);
+    expect(lanes[0].limits).toEqual([{ label: 'All models', remaining: 80 }]);
+    expect(lanes[1].limits).toEqual([{ label: 'Fable', remaining: 60 }]);
   });
 
   test('codex: keeps the weekly lane on the account quota instead of Spark quota', () => {
@@ -440,20 +510,75 @@ describe('buildTimelineLane', () => {
     expect(lane.limits).toEqual([{ label: 'GrokBuild', remaining: 95 }]);
   });
 
-  test('xai without a weekly limit produces no window at all', () => {
-    // A monthly summary carries periodEnd too, but that is a billing cycle.
-    for (const periodType of ['monthly', 'unknown'] as const) {
-      const lane = buildTimelineLane({
-        ...base,
-        provider: 'xai',
-        quota: {
-          status: 'success',
-          billing: { periodType, usagePercent: 69, resetAtMs: 9000, periodHours: 720 },
+  test('xai: monthly period produces no window; unknown period with usable reset creates a lane', () => {
+    // Monthly is a billing cycle, never a quota window.
+    const monthly = buildTimelineLane({
+      ...base,
+      provider: 'xai',
+      quota: {
+        status: 'success',
+        billing: { periodType: 'monthly', usagePercent: 69, resetAtMs: 9000, periodHours: 720 },
+      },
+    });
+    expect(monthly.anchorMs).toBeNull();
+    expect(laneHasWindow(monthly)).toBe(false);
+
+    // Unknown period with a usable reset still gets a lane (paid-health fallback).
+    const unknown = buildTimelineLane({
+      ...base,
+      provider: 'xai',
+      quota: {
+        status: 'success',
+        billing: { periodType: 'unknown', usagePercent: 69, resetAtMs: 9000, periodHours: 720 },
+      },
+    });
+    expect(unknown.anchorMs).toBe(9000);
+    expect(laneHasWindow(unknown)).toBe(true);
+  });
+
+  test('xai: every Grok lane carries the pinned Sep 12 rate-limit reset credit', () => {
+    // The one-time grant is not in the API payload, so the lane builder pins
+    // it unconditionally — both paid-health lanes and real weekly billing
+    // lanes (where the user's account actually runs) must show it.
+    const sep12Cst = new Date('2026-09-12T06:00:00Z').getTime();
+
+    const paidHealth = buildTimelineLane({
+      ...base,
+      provider: 'xai',
+      quota: {
+        status: 'success',
+        billing: {
+          mode: 'paid-health',
+          periodType: 'unknown',
+          usagePercent: null,
         },
-      });
-      expect(lane.anchorMs).toBeNull();
-      expect(laneHasWindow(lane)).toBe(false);
-    }
+      },
+    });
+    // No window bars (no resetAtMs/periodEnd), but the credit is still pinned.
+    expect(paidHealth.anchorMs).toBeNull();
+    expect(laneHasWindow(paidHealth)).toBe(false);
+    expect(paidHealth.resetCredits).toHaveLength(1);
+    expect(paidHealth.resetCredits[0].id).toBe('grok:rate-limit-reset');
+    expect(paidHealth.resetCredits[0].expiresAtMs).toBe(sep12Cst);
+
+    // Weekly billing lane — the mode the user's Grok account actually runs.
+    const weekly = buildTimelineLane({
+      ...base,
+      provider: 'xai',
+      quota: {
+        status: 'success',
+        billing: {
+          periodType: 'weekly',
+          usagePercent: 41,
+          resetAtMs: 9000,
+          periodHours: 168,
+          productUsage: [],
+        },
+      },
+    });
+    expect(weekly.anchorMs).toBe(9000);
+    expect(weekly.resetCredits).toHaveLength(1);
+    expect(weekly.resetCredits[0].expiresAtMs).toBe(sep12Cst);
   });
 
   test('xai defaults to a 7-day period when the payload states no start', () => {
