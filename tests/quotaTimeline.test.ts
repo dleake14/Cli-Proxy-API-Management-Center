@@ -858,51 +858,6 @@ describe('buildTimelineLane', () => {
     expect(laneHasWindow(unknown)).toBe(true);
   });
 
-  test('xai: every Grok lane carries the pinned Sep 12 rate-limit reset credit', () => {
-    // The one-time grant is not in the API payload, so the lane builder pins
-    // it unconditionally — both paid-health lanes and real weekly billing
-    // lanes (where the user's account actually runs) must show it.
-    const sep12Cst = new Date('2026-09-12T06:00:00Z').getTime();
-
-    const paidHealth = buildTimelineLane({
-      ...base,
-      provider: 'xai',
-      quota: {
-        status: 'success',
-        billing: {
-          mode: 'paid-health',
-          periodType: 'unknown',
-          usagePercent: null,
-        },
-      },
-    });
-    // No window bars (no resetAtMs/periodEnd), but the credit is still pinned.
-    expect(paidHealth.anchorMs).toBeNull();
-    expect(laneHasWindow(paidHealth)).toBe(false);
-    expect(paidHealth.resetCredits).toHaveLength(1);
-    expect(paidHealth.resetCredits[0].id).toBe('grok:rate-limit-reset');
-    expect(paidHealth.resetCredits[0].expiresAtMs).toBe(sep12Cst);
-
-    // Weekly billing lane — the mode the user's Grok account actually runs.
-    const weekly = buildTimelineLane({
-      ...base,
-      provider: 'xai',
-      quota: {
-        status: 'success',
-        billing: {
-          periodType: 'weekly',
-          usagePercent: 41,
-          resetAtMs: 9000,
-          periodHours: 168,
-          productUsage: [],
-        },
-      },
-    });
-    expect(weekly.anchorMs).toBe(9000);
-    expect(weekly.resetCredits).toHaveLength(1);
-    expect(weekly.resetCredits[0].expiresAtMs).toBe(sep12Cst);
-  });
-
   test('xai defaults to a 7-day period when the payload states no start', () => {
     const lane = buildTimelineLane({
       ...base,

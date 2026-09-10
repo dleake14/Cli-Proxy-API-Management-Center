@@ -565,19 +565,6 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     // back — so drop monthly lanes entirely.
     if (billing.periodType === 'monthly') return empty;
 
-    // One-time Grok rate limit reset credit expiring Sep 12, 2026.
-    // The xAI billing API has no field for this grant (it is not part of the
-    // weekly window), so it is pinned here so the timeline can show it.
-    // Remove once the credit is consumed or expires.
-    const syntheticResetCredits: TimelineResetCredit[] = [
-      {
-        id: 'grok:rate-limit-reset',
-        grantedAtMs: null,
-        // Sep 12, 2026 00:00 CST = 2026-09-12 06:00:00 UTC
-        expiresAtMs: new Date('2026-09-12T06:00:00Z').getTime(),
-      },
-    ];
-
     const remaining =
       typeof billing.usagePercent === 'number' ? clampPercent(100 - billing.usagePercent) : null;
 
@@ -593,7 +580,7 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
             typeof entry.usagePercent === 'number' ? clampPercent(100 - entry.usagePercent) : null,
         }))
         .filter((limit): limit is TimelineLimit => limit.remaining !== null),
-      resetCredits: [...empty.resetCredits, ...syntheticResetCredits],
+      resetCredits: empty.resetCredits,
     };
   }
 

@@ -327,42 +327,6 @@ describe('QuotaTimeline rendering', () => {
     expect(markup).toContain('08/03 12:00');
   });
 
-  test('renders the pinned Grok Sep 12 reset as a manual reset tick', () => {
-    // Sep 5, 2026 — the 14-day weekly span covers Sep 6–Sep 19, which
-    // includes the Sep 12 Grok reset credit.
-    const sep5 = new Date(2026, 8, 5, 12).getTime();
-    const sep12 = new Date(2026, 8, 12, 0).getTime();
-
-    const markup = renderToStaticMarkup(
-      createElement(QuotaTimeline, {
-        entries: [
-          {
-            file: { name: 'grok.json', type: 'xai' },
-            type: 'xai',
-          },
-        ],
-        displayNameFor: (name: string) => name,
-        resolvedTheme: 'light',
-        now: sep5,
-        quotaFor: () => ({
-          status: 'success',
-          billing: {
-            periodType: 'weekly',
-            usagePercent: 30,
-            resetAtMs: sep12,
-            periodHours: 168,
-            productUsage: [],
-          },
-        }),
-      })
-    );
-
-    // The pinned Sep 12 Grok credit renders as a manual reset tick.
-    expect(markup).toContain('role="img"');
-    expect(markup).toContain('Manual reset');
-    expect(markup).toContain('09/12');
-  });
-
   test('stays hidden before any credential exposes a usable quota window', () => {
     const markup = renderToStaticMarkup(
       createElement(QuotaTimeline, {
