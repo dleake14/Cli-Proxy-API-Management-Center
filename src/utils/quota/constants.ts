@@ -10,6 +10,14 @@ export const TYPE_COLORS: Record<string, TypeColorSet> = {
     light: { bg: '#e8eef4', text: '#2f5f8f' },
     dark: { bg: '#1d3a55', text: '#9dc4e8' },
   },
+  cursor: {
+    light: { bg: '#ececec', text: '#1a1a1a' },
+    dark: { bg: '#2a2a2a', text: '#e8e8e8' },
+  },
+  muse: {
+    light: { bg: '#e7eefc', text: '#1c4ed8' },
+    dark: { bg: '#1e3a5f', text: '#93c5fd' },
+  },
   qwen: {
     light: { bg: '#ede5fd', text: '#5530c7' },
     dark: { bg: '#36208a', text: '#b5a3f0' },
@@ -152,6 +160,14 @@ export const KIMI_USAGE_URL = 'https://api.kimi.com/coding/v1/usages';
 export const OLLAMA_USAGE_ENDPOINT: string =
   (import.meta.env?.VITE_OLLAMA_USAGE_URL as string | undefined)?.trim() ||
   'http://127.0.0.1:47193/ollama-usage';
+
+export const CURSOR_USAGE_ENDPOINT: string =
+  (import.meta.env?.VITE_CURSOR_USAGE_URL as string | undefined)?.trim() ||
+  'http://127.0.0.1:47193/cursor-usage';
+
+export const MUSE_USAGE_ENDPOINT: string =
+  (import.meta.env?.VITE_MUSE_USAGE_URL as string | undefined)?.trim() ||
+  'http://127.0.0.1:47193/muse-usage';
 
 export const KIMI_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',

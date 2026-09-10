@@ -23,6 +23,10 @@ import { OLLAMA_CONFIG } from './ollama/data';
 import { OllamaQuotaBody } from './ollama/OllamaQuotaBody';
 import { XAI_CONFIG } from './xai/data';
 import { XaiQuotaBody } from './xai/XaiQuotaBody';
+import { CURSOR_CONFIG } from './cursor/data';
+import { CursorQuotaBody } from './cursor/CursorQuotaBody';
+import { MUSE_CONFIG } from './muse/data';
+import { MuseQuotaBody } from './muse/MuseQuotaBody';
 
 /** 所有 provider 额度状态的公共骨架（各 *QuotaState 的结构子集）。 */
 export interface QuotaCardState {
@@ -56,6 +60,8 @@ export const QUOTA_ADAPTERS: Record<QuotaProviderType, QuotaAdapter> = {
   kimi: { ...KIMI_CONFIG, Body: KimiQuotaBody } as unknown as QuotaAdapter,
   ollama: { ...OLLAMA_CONFIG, Body: OllamaQuotaBody } as unknown as QuotaAdapter,
   xai: { ...XAI_CONFIG, Body: XaiQuotaBody } as unknown as QuotaAdapter,
+  cursor: { ...CURSOR_CONFIG, Body: CursorQuotaBody } as unknown as QuotaAdapter,
+  muse: { ...MUSE_CONFIG, Body: MuseQuotaBody } as unknown as QuotaAdapter,
 };
 
 export type QuotaMapUpdater = (

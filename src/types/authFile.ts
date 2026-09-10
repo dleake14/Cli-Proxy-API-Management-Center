@@ -9,6 +9,8 @@ export type AuthFileType =
   | 'qwen'
   | 'kimi'
   | 'ollama'
+  | 'cursor'
+  | 'muse'
   | 'gemini'
   | 'aistudio'
   | 'claude'

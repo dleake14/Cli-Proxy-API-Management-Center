@@ -25,7 +25,15 @@ export type AuthFileModelItem = {
 };
 export type AuthFileIconAsset = string | { light: string; dark: string };
 
-export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'kimi' | 'ollama' | 'xai';
+export type QuotaProviderType =
+  | 'antigravity'
+  | 'claude'
+  | 'codex'
+  | 'kimi'
+  | 'ollama'
+  | 'xai'
+  | 'cursor'
+  | 'muse';
 export type OAuthConfigLoadError = 'loading' | 'unsupported' | 'load' | null;
 
 export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
@@ -35,6 +43,8 @@ export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
   'kimi',
   'ollama',
   'xai',
+  'cursor',
+  'muse',
 ]);
 
 export const OAUTH_PROVIDER_PRESETS = [
@@ -64,6 +74,8 @@ export const AUTH_FILE_MANUAL_REFRESH_PROVIDERS = new Set([
   'kimi',
   'ollama',
   'xai',
+  'cursor',
+  'muse',
 ]);
 
 // 标签类型颜色配置：权威版本在 @/utils/quota/constants.ts，此处仅转发
@@ -79,6 +91,8 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   iflow: iconIflow,
   kimi: { light: iconKimiDark, dark: iconKimiLight },
   ollama: iconOllama,
+  cursor: iconOllama,
+  muse: iconOllama,
   qwen: iconQwen,
   vertex: iconVertex,
 };

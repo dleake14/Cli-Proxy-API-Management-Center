@@ -31,6 +31,14 @@ export function isOllamaFile(file: AuthFileItem): boolean {
   return resolveAuthProvider(file) === 'ollama';
 }
 
+export function isCursorFile(file: AuthFileItem): boolean {
+  return resolveAuthProvider(file) === 'cursor';
+}
+
+export function isMuseFile(file: AuthFileItem): boolean {
+  return resolveAuthProvider(file) === 'muse';
+}
+
 export function isXaiFile(file: AuthFileItem): boolean {
   return resolveAuthProvider(file) === 'xai';
 }

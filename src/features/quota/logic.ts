@@ -10,6 +10,8 @@ import { CODEX_CONFIG } from './providers/codex/data';
 import { KIMI_CONFIG } from './providers/kimi/data';
 import { OLLAMA_CONFIG } from './providers/ollama/data';
 import { XAI_CONFIG } from './providers/xai/data';
+import { CURSOR_CONFIG } from './providers/cursor/data';
+import { MUSE_CONFIG } from './providers/muse/data';
 import type { QuotaProviderType } from './providers/types';
 import { QUOTA_TAB_ORDER, type QuotaSortMode, type QuotaTabId } from './constants';
 
@@ -20,6 +22,8 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
   kimi: KIMI_CONFIG.filterFn,
   ollama: OLLAMA_CONFIG.filterFn,
   xai: XAI_CONFIG.filterFn,
+  cursor: CURSOR_CONFIG.filterFn,
+  muse: MUSE_CONFIG.filterFn,
 };
 
 export interface QuotaFileEntry {
@@ -38,6 +42,11 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType 
  * other provider files remain available to their owning surfaces but do not
  * render as quota cards here.
  */
+const RUNTIME_QUOTA_CARDS: ReadonlyArray<{ name: string; type: QuotaProviderType }> = [
+  { name: 'Cursor Ultra', type: 'cursor' },
+  { name: 'Muse High Usage', type: 'muse' },
+];
+
 export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
   const groups = new Map<QuotaProviderType, QuotaFileEntry[]>(
     QUOTA_TAB_ORDER.map((type) => [type, []])
@@ -46,6 +55,20 @@ export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
     const type = resolveQuotaProviderType(file);
     if (!type) continue;
     groups.get(type)?.push({ file, type });
+  }
+  for (const card of RUNTIME_QUOTA_CARDS) {
+    const group = groups.get(card.type);
+    if (group && group.length === 0) {
+      group.push({
+        file: {
+          name: card.name,
+          provider: card.type,
+          type: card.type,
+          runtimeOnly: true,
+        },
+        type: card.type,
+      });
+    }
   }
 
   return QUOTA_TAB_ORDER.flatMap((type) => groups.get(type) ?? []);

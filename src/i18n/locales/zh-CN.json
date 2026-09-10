@@ -367,6 +367,8 @@
     "quota_refresh_success": "已刷新 \"{{name}}\" 的额度",
     "quota_refresh_failed": "刷新 \"{{name}}\" 的额度失败：{{message}}",
     "filter_ollama": "Ollama",
+    "filter_cursor": "Cursor",
+    "filter_muse": "Muse",
     "filter_meta": "Meta"
   },
   "antigravity_subscription": {
@@ -1177,7 +1179,7 @@
     "empty_title": "暂无可查额度的凭证",
     "empty_desc": "接入 Gemini、Claude、Codex、Grok 或 Kimi 凭证后即可在此查看额度。",
     "windows_title": "配额窗口",
-    "windows_span_weekly": "两周",
+    "windows_span_weekly": "{{count}} 天",
     "windows_span_session": "三天",
     "windows_current": "当前",
     "windows_today": "今天",
@@ -1185,9 +1187,14 @@
     "windows_next": "下一页",
     "windows_mode_weekly": "按周",
     "windows_mode_session": "5 小时",
+    "windows_zoom_in": "放大",
+    "windows_zoom_out": "缩小",
+    "windows_zoom_slider": "时间轴缩放",
+    "windows_span_session_days": "{{count}} 天",
     "windows_credential": "凭证",
     "windows_idle": "没有正在计时的窗口",
     "windows_empty_session": "当前页面没有凭证提供 5 小时配额窗口。",
+    "windows_now_pace": "{{label}} 按进度：剩余 {{percent}}%",
     "windows_legend_current": "当前窗口",
     "windows_legend_upcoming": "即将开始",
     "windows_legend_elapsed": "已结束",
@@ -1748,5 +1755,27 @@
     "session_window": "会话",
     "weekly_limit": "每周",
     "reset_hint": "{{hint}}后重置"
+  },
+  "cursor_quota": {
+    "title": "Cursor Quota",
+    "empty_title": "Cursor Ultra",
+    "empty_desc": "Cursor usage is read from the local IDE sign-in via the Usage Ledger sidecar.",
+    "idle": "Click here to refresh quota",
+    "loading": "Loading quota...",
+    "load_failed": "Failed to load quota: {{message}}",
+    "empty_data": "No quota data available",
+    "unreachable": "Usage Ledger is unreachable (start it on 127.0.0.1:47193)",
+    "refresh_button": "Refresh Quota"
+  },
+  "muse_quota": {
+    "title": "Muse Quota",
+    "empty_title": "Muse High Usage",
+    "empty_desc": "Meta does not publish remaining High Usage percent.",
+    "idle": "Click here to refresh quota",
+    "loading": "Loading quota...",
+    "load_failed": "Failed to load quota: {{message}}",
+    "empty_data": "No remaining-percent meter is published",
+    "unavailable": "Muse High Usage remaining is not published by Meta.",
+    "refresh_button": "Refresh Quota"
   }
 }

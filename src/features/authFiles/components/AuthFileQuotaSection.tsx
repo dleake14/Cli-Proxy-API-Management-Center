@@ -49,6 +49,9 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (quotaType === 'ollama')
       return state.ollamaQuota[file.name] as QuotaCardState | undefined;
     if (quotaType === 'xai') return state.xaiQuota[file.name] as QuotaCardState | undefined;
+    if (quotaType === 'cursor')
+      return state.cursorQuota[file.name] as QuotaCardState | undefined;
+    if (quotaType === 'muse') return state.museQuota[file.name] as QuotaCardState | undefined;
     return assertNever(quotaType);
   });
 

@@ -4,6 +4,7 @@ import {
   HOUR_MS,
   buildTimelineLane,
   buildTimelineLanes,
+  extendSpanToCoverNextWindows,
   laneHasWindow,
   pickLaneWindow,
   projectLane,
@@ -11,6 +12,10 @@ import {
   startOfDay,
   startOfWeek,
   timelineSpan,
+  timelineSpanZoomed,
+  clampTimelineZoomDays,
+  TIMELINE_ZOOM_BOUNDS,
+  scheduledRemainingAt,
   windowsIn,
 } from '../src/features/quota/quotaTimelineModel';
 import type { TimelineLane } from '../src/features/quota/quotaTimelineModel';
@@ -79,6 +84,28 @@ describe('span boundaries', () => {
     expect(span.endMs).toBeGreaterThan(now);
   });
 
+  test('scheduledRemainingAt returns the linear on-pace remaining percent', () => {
+    const start = at(2026, 6, 1, 0);
+    const end = at(2026, 6, 8, 0);
+    const mid = at(2026, 6, 4, 12);
+    expect(scheduledRemainingAt(mid, start, end)).toBe(50);
+    expect(scheduledRemainingAt(start, start, end)).toBe(100);
+    expect(scheduledRemainingAt(end - 1, start, end)).toBe(0);
+    expect(scheduledRemainingAt(start - 1, start, end)).toBeNull();
+  });
+
+  test('timelineSpanZoomed clamps the visible day count from the slider', () => {
+    const now = at(2026, 6, 29, 14, 0);
+    const zoomedIn = timelineSpanZoomed('weekly', 0, now, 5);
+    expect(zoomedIn.days).toBe(5);
+    expect(zoomedIn.endMs - zoomedIn.startMs).toBe(5 * DAY_MS);
+
+    const zoomedOut = timelineSpanZoomed('weekly', 0, now, 99);
+    expect(zoomedOut.days).toBe(TIMELINE_ZOOM_BOUNDS.weekly.max);
+
+    expect(clampTimelineZoomDays('session', 0)).toBe(TIMELINE_ZOOM_BOUNDS.session.min);
+  });
+
   test('offsets step a week in weekly mode and a day in session mode', () => {
     const now = at(2026, 6, 29, 14, 0);
     const weekly = timelineSpan('weekly', 0, now);
@@ -96,6 +123,66 @@ describe('span boundaries', () => {
     const span = timelineSpan('weekly', 0, at(2026, 2, 10, 12));
     expect(new Date(span.startMs).getHours()).toBe(0);
     expect(new Date(span.endMs).getHours()).toBe(0);
+  });
+});
+
+describe('extendSpanToCoverNextWindows', () => {
+  const lane = (over: Partial<TimelineLane> = {}): TimelineLane => ({
+    name: 'a.json',
+    displayName: 'Alice',
+    provider: 'claude',
+    anchorMs: at(2026, 8, 16, 20),
+    periodHours: 24 * 7,
+    remaining: 50,
+    limits: [],
+    resetCredits: [],
+    ...over,
+  });
+
+  test('extends the weekly span to cover the full next window of the latest reset', () => {
+    // Sep 10, 2026 (Thu). Base fortnight is Sep 6 – Sep 20.
+    const now = at(2026, 8, 10, 12);
+    const base = timelineSpan('weekly', 0, now);
+    expect(base.days).toBe(14);
+
+    // Grok resets Wed Sep 16; its next window opens there and ends Wed Sep 23.
+    const grok = lane({
+      name: 'grok.json',
+      displayName: 'Grok',
+      provider: 'xai',
+      anchorMs: at(2026, 8, 16, 16, 28),
+    });
+
+    const extended = extendSpanToCoverNextWindows(base, [grok], now);
+    expect(extended.endMs).toBeGreaterThanOrEqual(at(2026, 8, 23, 16, 28));
+    expect(extended.days).toBeGreaterThan(base.days);
+    // Rounded up to a whole number of days from the same start.
+    expect((extended.endMs - extended.startMs) % DAY_MS).toBe(0);
+    expect(extended.startMs).toBe(base.startMs);
+  });
+
+  test('returns the base span unchanged when no next window needs extension', () => {
+    const now = at(2026, 8, 10, 12);
+    const base = timelineSpan('weekly', 0, now);
+    // Next window ends Sep 19, inside the Sep 6 – Sep 20 base span.
+    const lane = {
+      name: 'a.json',
+      displayName: 'Alice',
+      provider: 'claude',
+      anchorMs: at(2026, 8, 12, 20),
+      periodHours: 24 * 7,
+      remaining: 50,
+      limits: [],
+      resetCredits: [],
+    };
+    expect(extendSpanToCoverNextWindows(base, [lane], now)).toBe(base);
+  });
+
+  test('ignores lanes with no anchor or period', () => {
+    const now = at(2026, 8, 10, 12);
+    const base = timelineSpan('weekly', 0, now);
+    const empty = lane({ anchorMs: null, periodHours: null });
+    expect(extendSpanToCoverNextWindows(base, [empty], now)).toBe(base);
   });
 });
 
@@ -282,12 +369,8 @@ describe('buildTimelineLane', () => {
     expect(session.periodHours).toBe(5);
     expect(session.remaining).toBe(80);
 
-    // Every limit is still summarized in the lane head regardless of the pick.
-    expect(weekly.limits).toEqual([
-      { label: '7-day', remaining: 7 },
-      { label: 'fable', remaining: 36 },
-      { label: '5-hour', remaining: 80 },
-    ]);
+    expect(weekly.limits).toEqual([]);
+    expect(weekly.compactHead).toBe(true);
   });
 
   test('keeps the canonical fable row in the Claude reset timeline', () => {
@@ -309,11 +392,12 @@ describe('buildTimelineLane', () => {
       },
       maxPeriodHours: 14 * 24,
     });
-    expect(lane.limits).toEqual([{ label: 'fable', remaining: 60 }]);
+    expect(lane.limits).toEqual([]);
+    expect(lane.compactHead).toBe(true);
     expect(lane.anchorMs).toBe(reset);
   });
 
-  test('builds a second weekly timeline bar for Fable directly after Claude', () => {
+  test('stacks Fable above all-models in one compact Claude lane', () => {
     const reset = at(2026, 7, 1, 20);
     const lanes = buildTimelineLanes({
       ...base,
@@ -341,14 +425,254 @@ describe('buildTimelineLane', () => {
       maxPeriodHours: 14 * 24,
     });
 
-    expect(lanes).toHaveLength(2);
-    expect(lanes.map((lane) => lane.displayName)).toEqual([
-      'Claude account',
-      'Claude account · Fable',
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]?.displayName).toBe('Claude account');
+    expect(lanes[0]?.remaining).toBe(60);
+    expect(lanes[0]?.limits).toEqual([]);
+    expect(lanes[0]?.stackedBars).toEqual([
+      { id: 'seven-day-fable', label: 'Fable', remaining: 60, tone: 'fable' },
+      { id: 'seven-day', label: 'All models', remaining: 80, tone: 'primary' },
     ]);
-    expect(lanes.map((lane) => lane.remaining)).toEqual([80, 60]);
-    expect(lanes[0].limits).toEqual([{ label: 'All models', remaining: 80 }]);
-    expect(lanes[1].limits).toEqual([{ label: 'Fable', remaining: 60 }]);
+  });
+
+  test('stacks Cursor Models and Other Models in one lane without duplicate chips', () => {
+    const reset = at(2026, 9, 19, 12);
+    const lanes = buildTimelineLanes({
+      ...base,
+      provider: 'cursor',
+      displayName: 'Cursor Ultra',
+      quota: {
+        status: 'success',
+        rows: [
+          {
+            id: 'session',
+            label: 'Cursor Models',
+            used: 12.39,
+            limit: 100,
+            resetAtMs: reset,
+            periodHours: 720,
+          },
+          {
+            id: 'weekly',
+            label: 'Other Models',
+            used: 60.79,
+            limit: 100,
+            resetAtMs: reset,
+            periodHours: 720,
+          },
+          {
+            id: 'monthly',
+            label: 'Included total',
+            used: 19.31,
+            limit: 100,
+            resetAtMs: reset,
+            periodHours: 720,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]?.displayName).toBe('Cursor Ultra');
+    expect(lanes[0]?.remaining).toBe(39);
+    expect(lanes[0]?.limits).toEqual([]);
+    expect(lanes[0]?.stackedBars).toEqual([
+      { id: 'session', label: 'Cursor Models', remaining: 88 },
+      { id: 'weekly', label: 'Other Models', remaining: 39 },
+    ]);
+  });
+
+  test('cursor: prefers the Cursor Models pool when lanes are not split', () => {
+    const reset = at(2026, 9, 19, 12);
+    const lane = buildTimelineLane({
+      ...base,
+      provider: 'cursor',
+      quota: {
+        status: 'success',
+        rows: [
+          {
+            id: 'session',
+            label: 'Cursor Models',
+            used: 12,
+            limit: 100,
+            resetAtMs: reset,
+            periodHours: 720,
+          },
+          {
+            id: 'weekly',
+            label: 'Other Models',
+            used: 61,
+            limit: 100,
+            resetAtMs: reset,
+            periodHours: 720,
+          },
+        ],
+      },
+      maxPeriodHours: 3 * 24,
+    });
+
+    expect(lane.remaining).toBe(88);
+    expect(lane.limits).toEqual([]);
+  });
+
+  test('codex timeline drops Spark model windows', () => {
+    const reset = at(2026, 7, 1, 20);
+    const lane = buildTimelineLane({
+      ...base,
+      provider: 'codex',
+      quota: {
+        status: 'success',
+        windows: [
+          {
+            id: 'weekly',
+            label: 'Weekly limit',
+            usedPercent: 70,
+            resetAtMs: reset,
+            periodHours: 168,
+          },
+          {
+            id: 'gpt-5-3-codex-spark-weekly-0',
+            label: 'GPT-5.3-Codex-Spark weekly limit',
+            usedPercent: 2,
+            resetAtMs: reset,
+            periodHours: 168,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lane.limits).toEqual([{ label: 'Weekly limit', remaining: 30 }]);
+  });
+
+  test('antigravity weekly view keeps only the weekly Gemini bucket', () => {
+    const reset = at(2026, 7, 1, 20);
+    const lane = buildTimelineLane({
+      ...base,
+      provider: 'antigravity',
+      quota: {
+        status: 'success',
+        groups: [
+          {
+            buckets: [
+              {
+                label: '5 hour limit',
+                remainingFraction: 0.4,
+                resetAtMs: 1000,
+                periodHours: 5,
+              },
+              {
+                label: 'Weekly limit',
+                remainingFraction: 0.82,
+                resetAtMs: reset,
+                periodHours: 168,
+              },
+            ],
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lane.anchorMs).toBe(reset);
+    expect(lane.periodHours).toBe(168);
+    expect(lane.limits).toEqual([]);
+    expect(lane.compactHead).toBe(true);
+  });
+
+  test('muse weekly view ignores scraped reset times and uses Sunday 7 PM Central', () => {
+    const now = at(2026, 8, 10, 15, 47);
+    const wrongReset = at(2026, 7, 1, 20);
+    const lane = buildTimelineLane({
+      ...base,
+      provider: 'muse',
+      nowMs: now,
+      quota: {
+        status: 'success',
+        rows: [
+          {
+            id: 'weekly',
+            label: 'Weekly limit',
+            used: 12,
+            limit: 100,
+            resetAtMs: wrongReset,
+            periodHours: 56,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lane.anchorMs).not.toBe(wrongReset);
+    expect(lane.periodHours).toBe(168);
+    expect(lane.anchorMs).toBeGreaterThan(now);
+  });
+
+  test('muse weekly view keeps only High Usage with a compact head', () => {
+    const now = at(2026, 7, 1, 12);
+    const lane = buildTimelineLane({
+      ...base,
+      provider: 'muse',
+      nowMs: now,
+      quota: {
+        status: 'success',
+        rows: [
+          {
+            id: 'session',
+            label: 'Current usage',
+            used: 20,
+            limit: 100,
+            resetAtMs: 1000,
+            periodHours: 5,
+          },
+          {
+            id: 'weekly',
+            label: 'Weekly limit',
+            used: 41,
+            limit: 100,
+            resetAtMs: at(2026, 7, 1, 20),
+            periodHours: 168,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lane.anchorMs).toBeGreaterThan(now);
+    expect(lane.periodHours).toBe(168);
+    expect(lane.limits).toEqual([]);
+    expect(lane.compactHead).toBe(true);
+  });
+
+  test('muse timeline lane stacks High Usage on the Sunday 7 PM cadence', () => {
+    const now = at(2026, 8, 10, 15);
+    const lanes = buildTimelineLanes({
+      ...base,
+      provider: 'muse',
+      displayName: 'Muse High Usage',
+      nowMs: now,
+      quota: {
+        status: 'success',
+        rows: [
+          {
+            id: 'weekly',
+            label: 'Weekly limit',
+            used: 66,
+            limit: 100,
+            resetAtMs: null,
+            periodHours: 168,
+          },
+        ],
+      },
+      maxPeriodHours: 14 * 24,
+    });
+
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]?.stackedBars).toEqual([
+      { id: 'weekly', label: 'High Usage', remaining: 34 },
+    ]);
+    expect(lanes[0]?.anchorMs).toBeGreaterThan(now);
   });
 
   test('codex: keeps the weekly lane on the account quota instead of Spark quota', () => {
@@ -465,10 +789,8 @@ describe('buildTimelineLane', () => {
     expect(lane.periodHours).toBe(168);
     // remainingFraction is REMAINING, so it is not inverted.
     expect(lane.remaining).toBe(82);
-    expect(lane.limits).toEqual([
-      { label: '5h', remaining: 40 },
-      { label: 'Weekly', remaining: 82 },
-    ]);
+    expect(lane.limits).toEqual([]);
+    expect(lane.compactHead).toBe(true);
   });
 
   test('antigravity buckets without a parseable reset do not anchor the lane', () => {

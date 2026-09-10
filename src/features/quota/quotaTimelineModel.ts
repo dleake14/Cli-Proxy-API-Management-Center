@@ -11,6 +11,13 @@
  */
 
 import { DAY_MS, HOUR_MS } from '@/utils/time/durations';
+import { museWeeklyResetMs } from './museResetSchedule';
+import {
+  isClaudeStackedWindow,
+  isCursorTimelineRow,
+  isHiddenCodexWindow,
+  isMuseTimelineRow,
+} from './windowVisibility';
 import type { QuotaProviderType } from './providers/types';
 
 export { DAY_MS, HOUR_MS };
@@ -23,8 +30,27 @@ export const TIMELINE_SPAN_DAYS: Record<TimelineMode, number> = {
   session: 3,
 };
 
+/** Shared draggable zoom slider range (visible day count). */
+export const TIMELINE_ZOOM_RANGE = { min: 3, max: 30 } as const;
+
+/** Draggable zoom slider bounds per mode (visible day count). */
+export const TIMELINE_ZOOM_BOUNDS: Record<
+  TimelineMode,
+  { min: number; max: number; default: number }
+> = {
+  weekly: { ...TIMELINE_ZOOM_RANGE, default: 14 },
+  session: { ...TIMELINE_ZOOM_RANGE, default: 3 },
+};
+
+export function clampTimelineZoomDays(mode: TimelineMode, visibleDays: number): number {
+  const { min, max } = TIMELINE_ZOOM_BOUNDS[mode];
+  return Math.max(min, Math.min(max, Math.round(visibleDays)));
+}
+
 /** The rolling window the session view projects, in hours. */
 const SESSION_PERIOD_HOURS = 5;
+/** Weekly timeline mode starts at a full 7-day span. */
+const WEEKLY_VIEW_MIN_HOURS = 7 * 24;
 
 /** A limit summarized in the lane's left column. */
 export interface TimelineLimit {
@@ -45,6 +71,15 @@ export interface TimelineResetCreditMark extends TimelineResetCredit {
   leftPercent: number;
 }
 
+/** One in-bar meter when several pools share one billing window (Cursor Ultra). */
+export interface TimelineStackedBar {
+  id: string;
+  label: string;
+  remaining: number | null;
+  /** Optional accent override for the in-bar meter (for example Claude Fable). */
+  tone?: 'fable' | 'primary';
+}
+
 /** One credential's row in the chart. */
 export interface TimelineLane {
   name: string;
@@ -58,6 +93,10 @@ export interface TimelineLane {
   remaining: number | null;
   limits: TimelineLimit[];
   resetCredits: TimelineResetCredit[];
+  /** Optional stacked meters drawn inside one live window bar. */
+  stackedBars?: TimelineStackedBar[];
+  /** Hide the 7d chip and limit chips — labels live in the bars instead. */
+  compactHead?: boolean;
 }
 
 /** One drawn bar: a single window occurrence within the visible span. */
@@ -140,6 +179,53 @@ export function timelineSpan(
   end.setDate(end.getDate() + days);
 
   return { startMs, endMs: end.getTime(), days };
+}
+
+/**
+ * Same anchor as {@link timelineSpan}, but the visible width comes from the
+ * zoom slider rather than the mode default.
+ */
+export function timelineSpanZoomed(
+  mode: TimelineMode,
+  offset: number,
+  now: number,
+  visibleDays: number
+): { startMs: number; endMs: number; days: number } {
+  const days = clampTimelineZoomDays(mode, visibleDays);
+  const base = new Date(mode === 'weekly' ? startOfWeek(now) : startOfDay(now));
+  base.setDate(base.getDate() + offset * (mode === 'weekly' ? 7 : 1));
+  const startMs = base.getTime();
+  return { startMs, endMs: startMs + days * DAY_MS, days };
+}
+
+/**
+ * Extend a weekly span so it captures the full next window of the provider
+ * that resets latest.
+ *
+ * The fixed fortnight can clip a long window in half: the bar for the window
+ * that opens at the next reset is cut at the span edge, so the user can't see
+ * when capacity actually comes back. This pushes the span end out to the end of
+ * that next window (rounded up to a day boundary) so the full bar is visible.
+ * Session mode is left alone — it is a deliberate 3-day zoom.
+ */
+export function extendSpanToCoverNextWindows(
+  span: { startMs: number; endMs: number; days: number },
+  lanes: readonly TimelineLane[],
+  now: number
+): { startMs: number; endMs: number; days: number } {
+  let maxEnd = span.endMs;
+  for (const lane of lanes) {
+    if (lane.anchorMs === null || !lane.periodHours) continue;
+    const periodMs = lane.periodHours * HOUR_MS;
+    // The next reset at or after now, then the window that opens there.
+    const nextReset = lane.anchorMs + Math.ceil((now - lane.anchorMs) / periodMs) * periodMs;
+    const nextWindowEnd = nextReset + periodMs;
+    if (nextWindowEnd > maxEnd) maxEnd = nextWindowEnd;
+  }
+  if (maxEnd <= span.endMs) return span;
+
+  const days = Math.ceil((maxEnd - span.startMs) / DAY_MS);
+  return { startMs: span.startMs, endMs: span.startMs + days * DAY_MS, days };
 }
 
 /**
@@ -270,10 +356,25 @@ export function laneHasWindow(lane: TimelineLane): boolean {
 interface WindowLike {
   id?: string;
   label?: string;
+  labelKey?: string;
+  labelParams?: Record<string, unknown>;
   usedPercent?: number | null;
   resetAtMs?: number | null;
   periodHours?: number | null;
 }
+
+const filterBucketsForTimelineView = <T extends { periodHours?: number | null }>(
+  buckets: readonly T[],
+  maxPeriodHours?: number
+): T[] => {
+  if (maxPeriodHours === undefined) return [...buckets];
+  if (maxPeriodHours < WEEKLY_VIEW_MIN_HOURS) {
+    const short = buckets.filter((bucket) => (bucket.periodHours ?? Infinity) <= SESSION_PERIOD_HOURS);
+    return short.length > 0 ? short : [...buckets];
+  }
+  const weekly = buckets.filter((bucket) => (bucket.periodHours ?? 0) >= WEEKLY_VIEW_MIN_HOURS);
+  return weekly.length > 0 ? weekly : [...buckets];
+};
 
 interface ResetCreditLike {
   id?: string;
@@ -283,6 +384,7 @@ interface ResetCreditLike {
 }
 
 interface KimiRowLike {
+  id?: string;
   label?: string;
   labelKey?: string;
   used: number;
@@ -320,9 +422,26 @@ export interface TimelineLaneInput {
    * shorter one degenerates into slivers.
    */
   maxPeriodHours?: number;
+  /** Injectable clock for schedule-derived anchors (Muse weekly reset). */
+  nowMs?: number;
 }
 
 const clampPercent = (value: number) => Math.min(100, Math.max(0, value));
+
+/**
+ * Remaining percent expected at `nowMs` if usage were spread evenly across the
+ * window — the on-pace reading at the vertical "now" marker.
+ */
+export function scheduledRemainingAt(
+  nowMs: number,
+  windowStartMs: number,
+  windowEndMs: number
+): number | null {
+  if (nowMs < windowStartMs || nowMs >= windowEndMs) return null;
+  const duration = windowEndMs - windowStartMs;
+  if (!(duration > 0)) return null;
+  return clampPercent(Math.round((100 * (windowEndMs - nowMs)) / duration));
+}
 
 /**
  * Build a lane for one credential.
@@ -337,7 +456,7 @@ const clampPercent = (value: number) => Math.min(100, Math.max(0, value));
  * scheduled", which is the truth.
  */
 export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
-  const { name, displayName, provider, quota, maxPeriodHours } = input;
+  const { name, displayName, provider, quota, maxPeriodHours, nowMs } = input;
   const empty: TimelineLane = {
     name,
     displayName,
@@ -352,9 +471,17 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
   if (!quota || quota.status !== 'success') return empty;
 
   if (provider === 'claude' || provider === 'codex') {
-    const windows = ((quota as { windows?: WindowLike[] }).windows ?? []).filter(
-      (window) => typeof window.resetAtMs === 'number'
-    );
+    let windows = ((quota as { windows?: WindowLike[] }).windows ?? [])
+      .filter((window) => typeof window.resetAtMs === 'number')
+      .filter((window) => provider !== 'codex' || !isHiddenCodexWindow(window));
+    if (provider === 'claude' && maxPeriodHours !== undefined && maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS) {
+      const weekly = windows.filter(
+        (window) =>
+          isClaudeStackedWindow(window.id) ||
+          (window.periodHours ?? 0) >= 24 * 7
+      );
+      windows = weekly.length > 0 ? weekly : windows;
+    }
     const preferredCodexId =
       maxPeriodHours !== undefined && maxPeriodHours <= SESSION_PERIOD_HOURS
         ? 'five-hour'
@@ -394,6 +521,13 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
             .filter((credit): credit is TimelineResetCredit => credit !== null)
         : [];
 
+    const limits = windows
+      .filter((window) => typeof window.usedPercent === 'number')
+      .map((window) => ({
+        label: window.label ?? '',
+        remaining: clampPercent(100 - (window.usedPercent as number)),
+      }));
+
     return {
       ...empty,
       anchorMs: chosen.resetAtMs ?? null,
@@ -401,12 +535,14 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
       // Claude and Codex store percent USED.
       remaining:
         typeof chosen.usedPercent === 'number' ? clampPercent(100 - chosen.usedPercent) : null,
-      limits: windows
-        .filter((window) => typeof window.usedPercent === 'number')
-        .map((window) => ({
-          label: window.label ?? '',
-          remaining: clampPercent(100 - (window.usedPercent as number)),
-        })),
+      limits:
+        provider === 'claude' && maxPeriodHours !== undefined && maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS
+          ? []
+          : limits,
+      compactHead:
+        provider === 'claude' &&
+        maxPeriodHours !== undefined &&
+        maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS,
       resetCredits,
     };
   }
@@ -464,9 +600,12 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
   if (provider === 'antigravity') {
     // Buckets live one level down, inside groups, and the groups are a display
     // concern the chart doesn't care about — flatten them.
-    const buckets = ((quota as { groups?: { buckets?: AntigravityBucketLike[] }[] }).groups ?? [])
-      .flatMap((group) => group.buckets ?? [])
-      .filter((bucket) => typeof bucket.resetAtMs === 'number');
+    const buckets = filterBucketsForTimelineView(
+      ((quota as { groups?: { buckets?: AntigravityBucketLike[] }[] }).groups ?? [])
+        .flatMap((group) => group.buckets ?? [])
+        .filter((bucket) => typeof bucket.resetAtMs === 'number'),
+      maxPeriodHours
+    );
     const chosen = pickLaneWindow(buckets, maxPeriodHours);
     if (!chosen) return empty;
 
@@ -476,22 +615,46 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
         ? clampPercent(Math.round(bucket.remainingFraction * 100))
         : null;
 
+    const weeklyView = maxPeriodHours !== undefined && maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS;
+
     return {
       ...empty,
       anchorMs: chosen.resetAtMs ?? null,
       periodHours: chosen.periodHours ?? null,
       remaining: remainingOf(chosen),
-      limits: buckets
-        .map((bucket) => ({ label: bucket.label ?? '', remaining: remainingOf(bucket) }))
-        .filter((limit): limit is TimelineLimit => limit.remaining !== null),
+      limits: weeklyView
+        ? []
+        : buckets
+            .map((bucket) => ({ label: bucket.label ?? '', remaining: remainingOf(bucket) }))
+            .filter((limit): limit is TimelineLimit => limit.remaining !== null),
+      compactHead: weeklyView,
     };
   }
 
-  if (provider === 'kimi' || provider === 'ollama') {
-    const rows = ((quota as { rows?: KimiRowLike[] }).rows ?? []).filter(
+  if (provider === 'kimi' || provider === 'ollama' || provider === 'cursor' || provider === 'muse') {
+    const allRows = ((quota as { rows?: KimiRowLike[] }).rows ?? []).filter(
       (row) => typeof row.resetAtMs === 'number'
     );
-    const chosen = pickLaneWindow(rows, maxPeriodHours);
+    const rows =
+      provider === 'cursor'
+        ? allRows.filter((row) => isCursorTimelineRow(row.id))
+        : provider === 'muse'
+          ? allRows
+              .filter((row) => isMuseTimelineRow(row.id))
+              .map((row) => ({
+                ...row,
+                label: row.label === 'Weekly limit' ? 'High Usage' : row.label,
+                resetAtMs: museWeeklyResetMs(nowMs ?? Date.now()),
+                periodHours: 24 * 7,
+              }))
+          : allRows;
+    const preferredCursor =
+      provider === 'cursor'
+        ? rows.find((row) => row.id === 'session') ??
+          rows.find((row) => row.id === 'weekly') ??
+          null
+        : null;
+    const chosen = preferredCursor ?? pickLaneWindow(rows, maxPeriodHours);
     if (!chosen) return empty;
 
     // Kimi reports raw counts; remaining is derived. Ollama rows arrive as
@@ -499,49 +662,164 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     const remainingOf = (row: KimiRowLike) =>
       row.limit > 0 ? clampPercent(Math.round(((row.limit - row.used) / row.limit) * 100)) : null;
 
+    const limits = rows
+      .map((row) => ({ label: row.label ?? '', remaining: remainingOf(row) }))
+      .filter((limit): limit is TimelineLimit => limit.remaining !== null);
+
     return {
       ...empty,
       anchorMs: chosen.resetAtMs ?? null,
       periodHours: chosen.periodHours ?? null,
       remaining: remainingOf(chosen),
-      limits: rows
-        .map((row) => ({ label: row.label ?? '', remaining: remainingOf(row) }))
-        .filter((limit): limit is TimelineLimit => limit.remaining !== null),
+      limits: provider === 'cursor' || provider === 'muse' ? [] : limits,
+      compactHead: provider === 'cursor' || provider === 'muse',
     };
   }
 
   return empty;
 }
 
+const rowQuota = (
+  quota: Record<string, unknown> | undefined,
+  rows: KimiRowLike[]
+): TimelineLaneInput['quota'] => ({ ...quota, status: 'success', rows }) as TimelineLaneInput['quota'];
+
+const claudeWindowQuota = (
+  quota: Record<string, unknown> | undefined,
+  windows: WindowLike[]
+): TimelineLaneInput['quota'] => ({ ...quota, status: 'success', windows }) as TimelineLaneInput['quota'];
+
+const remainingFromUsed = (usedPercent: number | null | undefined) =>
+  typeof usedPercent === 'number' ? clampPercent(100 - usedPercent) : null;
+
+const finishStackedLane = (
+  lane: TimelineLane,
+  stackedBars: TimelineStackedBar[]
+): TimelineLane => {
+  const remainders = stackedBars
+    .map((bar) => bar.remaining)
+    .filter((value): value is number => value !== null);
+  return {
+    ...lane,
+    limits: [],
+    compactHead: true,
+    stackedBars,
+    remaining: remainders.length > 0 ? Math.min(...remainders) : lane.remaining,
+  };
+};
+
 /**
  * Build every visible lane owned by one credential.
  *
- * Claude's Fable allowance is an independent weekly window. It shares the
- * credential card, but it must not disappear into the all-models summary in
- * the reset timeline. Keep it directly below the account lane as its own bar.
+ * Claude and Cursor stack independent weekly pools in one compact row. Fable
+ * and Cursor Models sit on top because they are the tighter limits in practice.
  */
 export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
-  if (input.provider !== 'claude' || (input.maxPeriodHours ?? Infinity) <= SESSION_PERIOD_HOURS) {
+  if ((input.maxPeriodHours ?? Infinity) < WEEKLY_VIEW_MIN_HOURS) {
     return [buildTimelineLane(input)];
   }
 
-  const quota = input.quota as ({ windows?: WindowLike[] } & Record<string, unknown>) | undefined;
-  const fable = quota?.windows?.find((window) => window.id === 'seven-day-fable');
-  if (!fable) return [buildTimelineLane(input)];
+  if (input.provider === 'claude') {
+    const quota = input.quota as ({ windows?: WindowLike[] } & Record<string, unknown>) | undefined;
+    const windows = (quota?.windows ?? []).filter((window) => typeof window.resetAtMs === 'number');
+    const fable = windows.find((window) => window.id === 'seven-day-fable');
+    const allModels = windows.find((window) => window.id === 'seven-day');
+    if (!fable && !allModels) return [buildTimelineLane(input)];
 
-  const primary = buildTimelineLane({
-    ...input,
-    quota: {
-      ...quota,
-      windows: quota!.windows?.filter((window) => window.id !== 'seven-day-fable'),
-    } as TimelineLaneInput['quota'],
-  });
+    const stackedBars: TimelineStackedBar[] = [];
+    if (fable) {
+      stackedBars.push({
+        id: 'seven-day-fable',
+        label: fable.label ?? 'Fable',
+        remaining: remainingFromUsed(fable.usedPercent),
+        tone: 'fable',
+      });
+    }
+    if (allModels) {
+      stackedBars.push({
+        id: 'seven-day',
+        label: allModels.label ?? 'All models',
+        remaining: remainingFromUsed(allModels.usedPercent),
+        tone: 'primary',
+      });
+    }
 
-  const fableLane = buildTimelineLane({
-    ...input,
-    name: `${input.name}:fable`,
-    displayName: `${input.displayName} · Fable`,
-    quota: { ...quota, windows: [fable] } as TimelineLaneInput['quota'],
-  });
-  return laneHasWindow(fableLane) ? [primary, fableLane] : [primary];
+    const anchor = fable ?? allModels!;
+    const lane = buildTimelineLane({
+      ...input,
+      quota: claudeWindowQuota(quota, [anchor]),
+    });
+    return stackedBars.length > 0 ? [finishStackedLane(lane, stackedBars)] : [lane];
+  }
+
+  if (input.provider === 'cursor') {
+    const quota = input.quota as ({ rows?: KimiRowLike[] } & Record<string, unknown>) | undefined;
+    const rows = (quota?.rows ?? []).filter(
+      (row) => typeof row.resetAtMs === 'number' && isCursorTimelineRow(row.id)
+    );
+    const cursorModels = rows.find((row) => row.id === 'session');
+    const otherModels = rows.find((row) => row.id === 'weekly');
+    if (!cursorModels && !otherModels) return [buildTimelineLane(input)];
+
+    const remainingOf = (row: KimiRowLike) =>
+      row.limit > 0 ? clampPercent(Math.round(((row.limit - row.used) / row.limit) * 100)) : null;
+
+    const stackedBars: TimelineStackedBar[] = [];
+    if (cursorModels) {
+      stackedBars.push({
+        id: 'session',
+        label: cursorModels.label ?? 'Cursor Models',
+        remaining: remainingOf(cursorModels),
+      });
+    }
+    if (otherModels) {
+      stackedBars.push({
+        id: 'weekly',
+        label: otherModels.label ?? 'Other Models',
+        remaining: remainingOf(otherModels),
+      });
+    }
+
+    const anchorRow = cursorModels ?? otherModels!;
+    const lane = buildTimelineLane({
+      ...input,
+      quota: rowQuota(quota, [anchorRow]),
+    });
+    return [finishStackedLane(lane, stackedBars)];
+  }
+
+  if (input.provider === 'muse') {
+    const quota = input.quota as ({ rows?: KimiRowLike[] } & Record<string, unknown>) | undefined;
+    const weekly = (quota?.rows ?? []).find((row) => row.id === 'weekly');
+    if (!weekly) {
+      return [buildTimelineLane({ ...input, nowMs: input.nowMs })];
+    }
+
+    const remainingOf = (row: KimiRowLike) =>
+      row.limit > 0 ? clampPercent(Math.round(((row.limit - row.used) / row.limit) * 100)) : null;
+
+    const lane = buildTimelineLane({
+      ...input,
+      nowMs: input.nowMs,
+      quota: rowQuota(quota, [
+        {
+          ...weekly,
+          label: 'High Usage',
+          resetAtMs: museWeeklyResetMs(input.nowMs ?? Date.now()),
+          periodHours: 24 * 7,
+        },
+      ]),
+    });
+    return [
+      finishStackedLane(lane, [
+        {
+          id: 'weekly',
+          label: 'High Usage',
+          remaining: remainingOf(weekly),
+        },
+      ]),
+    ];
+  }
+
+  return [buildTimelineLane(input)];
 }

@@ -24,7 +24,9 @@ import {
   laneHasWindow,
   projectLane,
   projectResetCredits,
-  timelineSpan,
+  scheduledRemainingAt,
+  timelineSpanZoomed,
+  TIMELINE_ZOOM_BOUNDS,
   DAY_MS,
 } from '../quotaTimelineModel';
 import type { TimelineLane, TimelineMode } from '../quotaTimelineModel';
@@ -37,6 +39,8 @@ const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const TIMELINE_ACCENTS = {
   claude: { light: '#c05621', dark: '#e8a882' },
   fable: { light: '#7c3aed', dark: '#c4b5fd' },
+  cursor: { light: '#1a1a1a', dark: '#e8e8e8' },
+  muse: { light: '#1c4ed8', dark: '#93c5fd' },
   xai: { light: '#0f766e', dark: '#5eead4' },
   codex: { light: '#3538d4', dark: '#a5b4fc' },
 } as const;
@@ -68,6 +72,8 @@ export interface QuotaTimelineProps {
   initialMode?: TimelineMode;
   /** Injectable initial date offset for tests/screenshots; defaults to the current period. */
   initialOffset?: number;
+  /** Injectable initial zoom day-count for tests/screenshots. */
+  initialZoomDays?: number;
 }
 
 export function QuotaTimeline({
@@ -78,10 +84,15 @@ export function QuotaTimeline({
   now: nowProp,
   initialMode = 'weekly',
   initialOffset = 0,
+  initialZoomDays,
 }: QuotaTimelineProps) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<TimelineMode>(initialMode);
   const [offset, setOffset] = useState(initialOffset);
+  const [zoomDays, setZoomDays] = useState(
+    initialZoomDays ?? TIMELINE_ZOOM_BOUNDS[initialMode].default
+  );
+  const zoomBounds = TIMELINE_ZOOM_BOUNDS[mode];
 
   // The clock has to advance on its own: bars are classified past/live/next
   // against it and the marker is positioned by it, so a long-lived tab would
@@ -90,12 +101,15 @@ export function QuotaTimeline({
   const tick = useNow(nowProp === undefined); // fixed clock: tests and screenshots
   const now = nowProp ?? tick;
 
-  const span = useMemo(() => timelineSpan(mode, offset, now), [mode, offset, now]);
+  const baseSpan = useMemo(
+    () => timelineSpanZoomed(mode, offset, now, zoomDays),
+    [mode, offset, now, zoomDays]
+  );
   const todayLabel = t('quota_management.windows_today', { defaultValue: 'Today' });
   // This button doubles as the selected-period indicator and the shortcut back
   // to the current period. Keeping its visible text hard-coded to "Today" made
   // successful previous/next navigation look as though the date never changed.
-  const navigationLabel = offset === 0 ? todayLabel : formatDay(span.startMs);
+  const navigationLabel = offset === 0 ? todayLabel : formatDay(baseSpan.startMs);
 
   const laneInputs = useMemo(
     () =>
@@ -122,15 +136,19 @@ export function QuotaTimeline({
         .flatMap((input) =>
           buildTimelineLanes({
             ...input,
+            nowMs: now,
             // Weekly mode prefers the longest readable window. Session mode
             // asks specifically for a real 5-hour window; longer periods must
             // not be reinterpreted as 5-hour resets.
-            maxPeriodHours: mode === 'session' ? 5 : span.days * 24,
+            maxPeriodHours: mode === 'session' ? 5 : baseSpan.days * 24,
           })
         )
         .filter((lane) => laneHasWindow(lane) && (mode !== 'session' || lane.periodHours === 5)),
-    [laneInputs, mode, span.days]
+    [laneInputs, mode, baseSpan.days, now]
   );
+
+  // The slider is the sole authority on visible width — no auto-extend past it.
+  const span = baseSpan;
 
   /** Weekly: one cell per day. Session: one per 6 hours. */
   const cells = useMemo(() => {
@@ -175,7 +193,10 @@ export function QuotaTimeline({
             {formatDay(span.startMs)} – {formatDay(span.endMs - DAY_MS)}
             {' · '}
             {mode === 'weekly'
-              ? t('quota_management.windows_span_weekly', { defaultValue: 'two weeks' })
+              ? t('quota_management.windows_span_weekly', {
+                  defaultValue: '{{count}} days',
+                  count: span.days,
+                })
               : t('quota_management.windows_span_session', { defaultValue: 'three days' })}
             {offset === 0 &&
               ` · ${t('quota_management.windows_current', { defaultValue: 'current' })}`}
@@ -218,6 +239,7 @@ export function QuotaTimeline({
                 onClick={() => {
                   setMode(value);
                   setOffset(0); // spans differ in size; an old offset means nothing
+                  setZoomDays(TIMELINE_ZOOM_BOUNDS[value].default);
                 }}
               >
                 {value === 'weekly'
@@ -275,6 +297,47 @@ export function QuotaTimeline({
           </>
         )}
       </div>
+
+      {lanes.length > 0 && (
+        <div className={styles.zoomBar}>
+          <span className={styles.zoomHint}>
+            {t('quota_management.windows_zoom_in', { defaultValue: 'Zoom in' })}
+          </span>
+          <input
+            type="range"
+            className={styles.zoomSlider}
+            min={zoomBounds.min}
+            max={zoomBounds.max}
+            step={1}
+            value={zoomDays}
+            onChange={(event) => setZoomDays(Number(event.target.value))}
+            aria-label={t('quota_management.windows_zoom_slider', {
+              defaultValue: 'Timeline zoom',
+            })}
+            aria-valuemin={zoomBounds.min}
+            aria-valuemax={zoomBounds.max}
+            aria-valuenow={zoomDays}
+            aria-valuetext={t('quota_management.windows_span_weekly', {
+              defaultValue: '{{count}} days',
+              count: zoomDays,
+            })}
+          />
+          <span className={styles.zoomHint}>
+            {t('quota_management.windows_zoom_out', { defaultValue: 'Zoom out' })}
+          </span>
+          <span className={styles.zoomValue}>
+            {mode === 'weekly'
+              ? t('quota_management.windows_span_weekly', {
+                  defaultValue: '{{count}} days',
+                  count: span.days,
+                })
+              : t('quota_management.windows_span_session_days', {
+                  defaultValue: '{{count}} days',
+                  count: span.days,
+                })}
+          </span>
+        </div>
+      )}
 
       {lanes.length > 0 && (
         <footer className={styles.legend}>
@@ -335,6 +398,25 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
     [lane, span, now]
   );
 
+  const stackedBars = lane.stackedBars ?? [];
+  const liveWindow = windows.find((window) => window.state === 'live') ?? null;
+  const paceMarks = useMemo(() => {
+    if (nowPercent === null || !liveWindow) return [];
+    const scheduled = scheduledRemainingAt(now, liveWindow.startMs, liveWindow.endMs);
+    if (scheduled === null) return [];
+
+    const bars =
+      stackedBars.length > 0
+        ? stackedBars.map((bar) => ({ id: bar.id, label: bar.label }))
+        : [{ id: lane.name, label: lane.displayName }];
+
+    return bars.map((bar, index) => ({
+      ...bar,
+      scheduled,
+      topPercent: ((index + 0.5) / bars.length) * 100,
+    }));
+  }, [liveWindow, lane.displayName, lane.name, now, nowPercent, stackedBars]);
+
   const colorSet = TYPE_COLORS[lane.provider] || TYPE_COLORS.unknown;
   const color: ThemeColors =
     resolvedTheme === 'dark' && colorSet.dark ? colorSet.dark : colorSet.light;
@@ -363,6 +445,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
       className={styles.lane}
       data-timeline-lane={lane.name}
       data-quota-risk={risk}
+      data-stacked={stackedBars.length > 0 ? 1 : 0}
       style={{ '--provider-accent': accent } as CSSProperties}
     >
       <div className={styles.laneHead}>
@@ -371,15 +454,19 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
           <span className={styles.laneName} title={lane.displayName}>
             {lane.displayName}
           </span>
-          {periodLabel && <span className={styles.lanePeriod}>{periodLabel}</span>}
+          {periodLabel && !lane.compactHead && (
+            <span className={styles.lanePeriod}>{periodLabel}</span>
+          )}
         </div>
-        <div className={styles.laneLimits}>
-          {lane.limits.map((limit) => (
-            <span key={limit.label} className={styles.laneLimit}>
-              {limit.label} <b>{limit.remaining}%</b>
-            </span>
-          ))}
-        </div>
+        {lane.limits.length > 0 && (
+          <div className={styles.laneLimits}>
+            {lane.limits.map((limit) => (
+              <span key={limit.label} className={styles.laneLimit}>
+                {limit.label} <b>{limit.remaining}%</b>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={styles.track}>
@@ -397,6 +484,21 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
           <div className={styles.nowLine} style={{ left: `${nowPercent}%` }} />
         )}
 
+        {paceMarks.map((mark) => (
+          <span
+            key={mark.id}
+            className={styles.nowMark}
+            style={{ left: `${nowPercent}%`, top: `${mark.topPercent}%` }}
+            title={t('quota_management.windows_now_pace', {
+              defaultValue: '{{label}} on-pace: {{percent}}% remaining',
+              label: mark.label,
+              percent: mark.scheduled,
+            })}
+          >
+            {mark.scheduled}%
+          </span>
+        ))}
+
         {windows.length === 0 ? (
           <span className={styles.laneIdle}>
             {t('quota_management.windows_idle', {
@@ -412,6 +514,62 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               mode === 'session'
                 ? formatTime(window.endMs)
                 : `${formatDay(window.endMs)} ${formatTime(window.endMs)}`;
+
+            if (stackedBars.length > 0 && window.state === 'live') {
+              return (
+                <div
+                  key={window.startMs}
+                  className={styles.stackedWindow}
+                  style={{ left: `${window.leftPercent}%`, width: `${window.widthPercent}%` }}
+                  title={stackedBars
+                    .map((bar) =>
+                      bar.remaining === null
+                        ? bar.label
+                        : `${bar.label}: ${bar.remaining}% remaining`
+                    )
+                    .join('\n')}
+                >
+                  {stackedBars.map((bar) => {
+                    const usedPastHalf =
+                      bar.remaining !== null && bar.remaining <= 50;
+                    const pct =
+                      bar.remaining === null ? '--' : `${Math.round(bar.remaining)}%`;
+                    const barAccent =
+                      bar.tone === 'fable'
+                        ? TIMELINE_ACCENTS.fable[resolvedTheme]
+                        : accent;
+                    return (
+                      <div
+                        key={bar.id}
+                        className={`${styles.stackBar} ${styles.windowLive}`}
+                        style={{ '--provider-accent': barAccent } as CSSProperties}
+                      >
+                        {bar.remaining !== null && (
+                          <span
+                            className={styles.windowFill}
+                            style={{ width: `${100 - bar.remaining}%` }}
+                          />
+                        )}
+                        <span
+                          className={styles.inBarLabel}
+                          data-swap={usedPastHalf ? 1 : 0}
+                        >
+                          {usedPastHalf ? (
+                            <>
+                              <b>{pct}</b> {bar.label}
+                            </>
+                          ) : (
+                            <>
+                              {bar.label} <b>{pct}</b>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
 
             return (
               <div

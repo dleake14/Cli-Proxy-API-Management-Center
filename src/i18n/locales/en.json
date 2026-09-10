@@ -367,6 +367,8 @@
     "quota_refresh_success": "Quota refreshed for \"{{name}}\"",
     "quota_refresh_failed": "Failed to refresh quota for \"{{name}}\": {{message}}",
     "filter_ollama": "Ollama",
+    "filter_cursor": "Cursor",
+    "filter_muse": "Muse",
     "filter_meta": "Meta"
   },
   "antigravity_subscription": {
@@ -1177,7 +1179,7 @@
     "empty_title": "No quota-capable credentials",
     "empty_desc": "Connect a Gemini, Claude, Codex, Grok, or Kimi credential to track its quota here.",
     "windows_title": "Quota windows",
-    "windows_span_weekly": "two weeks",
+    "windows_span_weekly": "{{count}} days",
     "windows_span_session": "three days",
     "windows_current": "current",
     "windows_today": "Today",
@@ -1185,9 +1187,14 @@
     "windows_next": "Next",
     "windows_mode_weekly": "Weekly",
     "windows_mode_session": "5-hour",
+    "windows_zoom_in": "Zoom in",
+    "windows_zoom_out": "Zoom out",
+    "windows_zoom_slider": "Timeline zoom",
+    "windows_span_session_days": "{{count}} days",
     "windows_credential": "Credential",
     "windows_idle": "no window counting down",
     "windows_empty_session": "No credentials on this page report a 5-hour quota window.",
+    "windows_now_pace": "{{label}} on-pace: {{percent}}% remaining",
     "windows_legend_current": "current window",
     "windows_legend_upcoming": "upcoming",
     "windows_legend_elapsed": "elapsed",
@@ -1748,5 +1755,27 @@
     "session_window": "Session",
     "weekly_limit": "Weekly",
     "reset_hint": "resets in {{hint}}"
+  },
+  "cursor_quota": {
+    "title": "Cursor Quota",
+    "empty_title": "Cursor Ultra",
+    "empty_desc": "Cursor usage is read from the local IDE sign-in via the Usage Ledger sidecar.",
+    "idle": "Click here to refresh quota",
+    "loading": "Loading quota...",
+    "load_failed": "Failed to load quota: {{message}}",
+    "empty_data": "No quota data available",
+    "unreachable": "Usage Ledger is unreachable (start it on 127.0.0.1:47193)",
+    "refresh_button": "Refresh Quota"
+  },
+  "muse_quota": {
+    "title": "Muse Quota",
+    "empty_title": "Muse High Usage",
+    "empty_desc": "Meta does not publish remaining High Usage percent.",
+    "idle": "Click here to refresh quota",
+    "loading": "Loading quota...",
+    "load_failed": "Failed to load quota: {{message}}",
+    "empty_data": "No remaining-percent meter is published",
+    "unavailable": "Muse High Usage remaining is not published by Meta.",
+    "refresh_button": "Refresh Quota"
   }
 }

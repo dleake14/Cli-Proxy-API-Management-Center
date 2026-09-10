@@ -37,15 +37,22 @@ describe('resolveQuotaProviderType', () => {
 
 describe('classifyQuotaFiles', () => {
   test('uses the requested top-bar provider order', () => {
-    expect(QUOTA_TAB_ORDER).toEqual(['codex', 'claude', 'xai', 'antigravity']);
+    expect(QUOTA_TAB_ORDER).toEqual([
+      'codex',
+      'claude',
+      'xai',
+      'antigravity',
+      'cursor',
+      'muse',
+    ]);
   });
 
   test('drops unsupported and disabled files', () => {
     const entries = classifyQuotaFiles(FILES);
     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
-    // Only the four operator-facing providers render quota entries.
-    expect(entries).toHaveLength(4);
+    // Operator-facing providers plus runtime Cursor/Muse cards.
+    expect(entries).toHaveLength(6);
   });
 
   test('orders entries by provider tab order', () => {
@@ -55,6 +62,8 @@ describe('classifyQuotaFiles', () => {
       'codex',
       'claude',
       'xai',
+      'cursor',
+      'muse',
     ]);
   });
 });
@@ -70,11 +79,13 @@ describe('classifyQuotaFiles — visible provider boundary', () => {
 describe('buildTabCounts', () => {
   test('counts per provider plus an all total, zero-filling empty tabs', () => {
     expect(buildTabCounts(classifyQuotaFiles(FILES))).toEqual({
-      all: 4,
+      all: 6,
       claude: 1,
       antigravity: 0,
       codex: 2,
       xai: 1,
+      cursor: 1,
+      muse: 1,
     });
   });
 });
@@ -83,7 +94,7 @@ describe('filterEntriesByTab', () => {
   const entries = classifyQuotaFiles(FILES);
 
   test("passes everything through on the 'all' tab", () => {
-    expect(filterEntriesByTab(entries, 'all')).toHaveLength(4);
+    expect(filterEntriesByTab(entries, 'all')).toHaveLength(6);
   });
 
   test('filters to a single provider', () => {
@@ -160,6 +171,8 @@ describe('sortQuotaEntries', () => {
       'claude-a.json',
       'codex-a.json',
       'codex-b.json',
+      'Cursor Ultra',
+      'Muse High Usage',
     ]);
   });
 
@@ -176,6 +189,8 @@ describe('sortQuotaEntries', () => {
       'codex-a.json',
       'claude-a.json',
       'grok-a.json',
+      'Cursor Ultra',
+      'Muse High Usage',
     ]);
   });
 

@@ -21,6 +21,7 @@ import { useNow } from '@/hooks/useNow';
 import { QuotaMeter } from '../../components/QuotaMeter';
 import { QuotaResetLabel } from '../../components/QuotaResetLabel';
 import { collectQuotaRowInstants, pickUrgentRowId, resetCreditRowId } from '../../resetSchedule';
+import { isHiddenCodexWindow } from '../../windowVisibility';
 import type { QuotaBodyProps, QuotaClassMap } from '../../types';
 
 const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): string => {
@@ -29,13 +30,6 @@ const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): str
   if (tier === 'elite') return classes.elitePlanValue;
   if (tier === 'premium') return classes.premiumPlanValue;
   return classes.codexPlanValue;
-};
-
-const isHiddenCodexWindow = (window: CodexQuotaState['windows'][number]): boolean => {
-  const searchableText = [window.id, window.label, ...Object.values(window.labelParams ?? {})]
-    .join(' ')
-    .toLowerCase();
-  return searchableText.includes('spark');
 };
 
 export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaState>) {

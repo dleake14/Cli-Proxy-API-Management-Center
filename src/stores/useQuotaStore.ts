@@ -8,6 +8,8 @@ import type {
   ClaudeQuotaState,
   CodexQuotaState,
   KimiQuotaState,
+  CursorQuotaState,
+  MuseQuotaState,
   OllamaQuotaState,
   XaiQuotaState,
 } from '@/types';
@@ -22,12 +24,16 @@ interface QuotaStoreState {
   kimiQuota: Record<string, KimiQuotaState>;
   ollamaQuota: Record<string, OllamaQuotaState>;
   xaiQuota: Record<string, XaiQuotaState>;
+  cursorQuota: Record<string, CursorQuotaState>;
+  museQuota: Record<string, MuseQuotaState>;
   setAntigravityQuota: (updater: QuotaUpdater<Record<string, AntigravityQuotaState>>) => void;
   setClaudeQuota: (updater: QuotaUpdater<Record<string, ClaudeQuotaState>>) => void;
   setCodexQuota: (updater: QuotaUpdater<Record<string, CodexQuotaState>>) => void;
   setKimiQuota: (updater: QuotaUpdater<Record<string, KimiQuotaState>>) => void;
   setOllamaQuota: (updater: QuotaUpdater<Record<string, OllamaQuotaState>>) => void;
   setXaiQuota: (updater: QuotaUpdater<Record<string, XaiQuotaState>>) => void;
+  setCursorQuota: (updater: QuotaUpdater<Record<string, CursorQuotaState>>) => void;
+  setMuseQuota: (updater: QuotaUpdater<Record<string, MuseQuotaState>>) => void;
   clearQuotaCache: () => void;
 }
 
@@ -46,6 +52,8 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
   kimiQuota: {},
   ollamaQuota: {},
   xaiQuota: {},
+  cursorQuota: {},
+  museQuota: {},
   setAntigravityQuota: (updater) =>
     set((state) => ({
       antigravityQuota: resolveUpdater(updater, state.antigravityQuota),
@@ -70,6 +78,14 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
     set((state) => ({
       xaiQuota: resolveUpdater(updater, state.xaiQuota),
     })),
+  setCursorQuota: (updater) =>
+    set((state) => ({
+      cursorQuota: resolveUpdater(updater, state.cursorQuota),
+    })),
+  setMuseQuota: (updater) =>
+    set((state) => ({
+      museQuota: resolveUpdater(updater, state.museQuota),
+    })),
   clearQuotaCache: () =>
     set((state) => ({
       cacheGeneration: state.cacheGeneration + 1,
@@ -79,6 +95,8 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
       kimiQuota: {},
       ollamaQuota: {},
       xaiQuota: {},
+      cursorQuota: {},
+      museQuota: {},
     })),
 }));
 

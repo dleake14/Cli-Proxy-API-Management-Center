@@ -334,6 +334,11 @@ export interface OllamaQuotaState {
   errorStatus?: number;
 }
 
+export type CursorQuotaRow = OllamaQuotaRow;
+export type CursorQuotaState = OllamaQuotaState;
+export type MuseQuotaRow = OllamaQuotaRow;
+export type MuseQuotaState = OllamaQuotaState;
+
 // xAI/Grok API payload types
 export interface XaiBillingCent {
   val?: number | string;

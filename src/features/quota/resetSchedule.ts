@@ -20,6 +20,7 @@
 
 import { parseIsoToMs } from '@/utils/quota';
 import { HOUR_MS } from '@/utils/time/durations';
+import { isCursorTimelineRow, isHiddenCodexWindow } from './windowVisibility';
 import type { QuotaProviderType } from './providers/types';
 
 export interface QuotaRowInstant {
@@ -91,7 +92,12 @@ export function collectQuotaRowInstants(
   if (!state || state.status !== 'success') return [];
 
   if (provider === 'claude' || provider === 'codex') {
-    const windows = collectRows((quota as { windows?: WindowLike[] }).windows ?? [], 'window');
+    const windows = collectRows(
+      ((quota as { windows?: WindowLike[] }).windows ?? []).filter(
+        (window) => provider !== 'codex' || !isHiddenCodexWindow(window)
+      ),
+      'window'
+    );
     if (provider !== 'codex') return windows;
 
     const credits = (
@@ -125,8 +131,11 @@ export function collectQuotaRowInstants(
     return collectRows(buckets, 'bucket');
   }
 
-  if (provider === 'kimi' || provider === 'ollama') {
-    return collectRows((quota as { rows?: WindowLike[] }).rows ?? [], 'row');
+  if (provider === 'kimi' || provider === 'ollama' || provider === 'cursor' || provider === 'muse') {
+    const rows = (quota as { rows?: WindowLike[] }).rows ?? [];
+    const visible =
+      provider === 'cursor' ? rows.filter((row) => isCursorTimelineRow(row.id)) : rows;
+    return collectRows(visible, 'row');
   }
 
   return [];

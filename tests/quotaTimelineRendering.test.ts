@@ -21,7 +21,7 @@ const baseProps = {
 };
 
 describe('QuotaTimeline rendering', () => {
-  test('renders separate all-models and Fable bars under one Claude credential', () => {
+  test('renders stacked Fable and all-models bars under one Claude credential', () => {
     const now = new Date(2026, 7, 1, 12).getTime();
     const reset = new Date(2026, 7, 5, 12).getTime();
     const markup = renderToStaticMarkup(
@@ -52,14 +52,11 @@ describe('QuotaTimeline rendering', () => {
       })
     );
 
-    expect(markup).toContain('Claude account · Fable');
     expect(markup).toContain('data-timeline-lane="Claude account"');
-    expect(markup).toContain('data-timeline-lane="Claude account:fable"');
-    expect(markup).toContain('data-quota-risk="normal"');
-    expect(markup).toContain('data-quota-risk="warning"');
-    expect(markup).toContain('59%');
-    expect(markup).toContain('40%');
-    expect(markup).toContain('--provider-accent:#c05621');
+    expect(markup).not.toContain('Claude account · Fable');
+    expect(markup).toContain('data-stacked="1"');
+    expect(markup).toContain('<b>40%</b> Fable');
+    expect(markup).toContain('All models <b>59%</b>');
     expect(markup).toContain('--provider-accent:#7c3aed');
   });
 
@@ -102,16 +99,102 @@ describe('QuotaTimeline rendering', () => {
       })
     );
 
-    const laneColors = [
-      ...markup.matchAll(/data-timeline-lane="([^"]+)"[^>]*style="--provider-accent:([^"]+)"/g),
-    ].map((match) => [match[1], match[2]]);
-    expect(laneColors).toEqual([
-      ['claude.json', '#c05621'],
-      ['claude.json:fable', '#7c3aed'],
-      ['grok.json', '#0f766e'],
-      ['codex.json', '#3538d4'],
-    ]);
-    expect(new Set(laneColors.map(([, color]) => color)).size).toBe(4);
+    expect(markup).toContain('data-timeline-lane="claude.json"');
+    expect(markup).toContain('--provider-accent:#7c3aed');
+    expect(markup).toContain('data-timeline-lane="grok.json"');
+    expect(markup).toContain('--provider-accent:#0f766e');
+    expect(markup).toContain('data-timeline-lane="codex.json"');
+    expect(markup).toContain('--provider-accent:#3538d4');
+  });
+
+  test('renders stacked Cursor Models and Other Models bars with in-bar labels', () => {
+    const reset = new Date(2026, 8, 19, 12).getTime();
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        entries: [{ file: { name: 'Cursor Ultra', type: 'cursor' }, type: 'cursor' }],
+        displayNameFor: (name: string) => name,
+        resolvedTheme: 'light',
+        now: new Date(2026, 8, 10, 12).getTime(),
+        quotaFor: () => ({
+          status: 'success',
+          rows: [
+            {
+              id: 'session',
+              label: 'Cursor Models',
+              used: 12.39,
+              limit: 100,
+              resetAtMs: reset,
+              periodHours: 720,
+            },
+            {
+              id: 'weekly',
+              label: 'Other Models',
+              used: 60.79,
+              limit: 100,
+              resetAtMs: reset,
+              periodHours: 720,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(markup).toContain('data-timeline-lane="Cursor Ultra"');
+    expect(markup).toContain('data-stacked="1"');
+    expect(markup).toContain('Cursor Models <b>88%</b>');
+    expect(markup).toContain('<b>39%</b> Other Models');
+    expect(markup).not.toContain('Included total');
+  });
+
+  test('renders on-pace labels at the now marker for each live window', () => {
+    const now = new Date(2026, 7, 1, 12).getTime();
+    const reset = new Date(2026, 7, 5, 12).getTime();
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        ...baseProps,
+        now,
+        quotaFor: () => ({
+          status: 'success',
+          windows: [
+            {
+              label: '7-day',
+              usedPercent: 25,
+              resetAtMs: reset,
+              periodHours: 168,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(markup).toContain('>57%<');
+    expect(markup).toContain('on-pace: 57% remaining');
+  });
+
+  test('renders the draggable zoom slider under the chart', () => {
+    const reset = new Date(2026, 7, 5, 12).getTime();
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        ...baseProps,
+        initialZoomDays: 7,
+        quotaFor: () => ({
+          status: 'success',
+          windows: [
+            {
+              label: '7-day',
+              usedPercent: 25,
+              resetAtMs: reset,
+              periodHours: 168,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(markup).toContain('type="range"');
+    expect(markup).toContain('min="3"');
+    expect(markup).toContain('max="30"');
+    expect(markup).toContain('value="7"');
   });
 
   test('shows the selected period date instead of always labelling it Today', () => {
