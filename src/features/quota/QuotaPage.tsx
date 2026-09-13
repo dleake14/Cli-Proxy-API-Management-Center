@@ -43,6 +43,7 @@ import {
   type QuotaFileEntry,
 } from './logic';
 import { nextRecoveryMs } from './resetSchedule';
+import { createQuotaRefreshController } from './quotaRefreshClock';
 import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers';
 import type { QuotaProviderType } from './providers/types';
 import { useQuotaActions } from './hooks/useQuotaActions';
@@ -132,9 +133,10 @@ export function QuotaPage() {
 
   /* ---------- 归类 / 过滤 / 排序 / 分页 ---------- */
 
-  // 只在「最快恢复优先」下订阅分钟时钟。默认序下不门控的话，pageItems 每分钟
-  // 换一次身份，会反复空转下面那个「刷新全部」的 loading 下降沿 effect。
-  const tick = useNow(sortMode !== 'default');
+  // Keep one live minute clock even in default sort mode. Codex and other
+  // providers return relative reset offsets; a long-lived tab must re-fetch
+  // them instead of preserving the weekday from the original page load.
+  const tick = useNow();
   const sortNow = sortMode === 'default' ? 0 : tick;
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
@@ -222,6 +224,47 @@ export function QuotaPage() {
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
   const { refreshQuota } = useQuotaActions(disableControls);
 
+  const autoRefreshState = useRef({ loading, disableControls, batchLoading, entries, loadQuota });
+  const autoRefreshController = useRef<ReturnType<typeof createQuotaRefreshController> | null>(null);
+
+  useEffect(() => {
+    autoRefreshState.current = { loading, disableControls, batchLoading, entries, loadQuota };
+    if (disableControls) autoRefreshController.current?.invalidate();
+    void autoRefreshController.current?.check();
+  }, [loading, disableControls, batchLoading, entries, loadQuota]);
+
+  useEffect(() => {
+    const controller = createQuotaRefreshController({
+      now: Date.now,
+      ready: () => {
+        const state = autoRefreshState.current;
+        return !state.loading && !state.disableControls && !state.batchLoading && state.entries.length > 0;
+      },
+      refresh: () => {
+        const state = autoRefreshState.current;
+        return state.loadQuota(state.entries, true);
+      },
+    });
+    autoRefreshController.current = controller;
+    const check = () => { void controller.check(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    // Polling checks readiness; provider requests run at most once per
+    // randomized 2–8 minute deadline (re-rolled after each refresh, see
+    // quotaRefreshClock). Focus/online catch up immediately after suspension.
+    const timer = window.setInterval(check, 15_000);
+    window.addEventListener('focus', check);
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', onVisible);
+    check();
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', check);
+      window.removeEventListener('online', check);
+      document.removeEventListener('visibilitychange', onVisible);
+      autoRefreshController.current = null;
+    };
+  }, []);
+
   const pendingRefreshRef = useRef(false);
   const prevLoadingRef = useRef(loading);
 
@@ -240,8 +283,8 @@ export function QuotaPage() {
     if (loading || !wasLoading) return;
 
     pendingRefreshRef.current = false;
-    void loadQuota(pageItems);
-  }, [loading, loadQuota, pageItems]);
+    void loadQuota(entries);
+  }, [loading, loadQuota, entries]);
 
   const canUseActions = !disableControls && !loading;
 
@@ -377,12 +420,15 @@ export function QuotaPage() {
           </div>
         )}
 
-        {/* 时间线只比较当前页凭证，避免大量凭证一次性生成无界泳道。 */}
+        {/* Compare every credential in the selected tool filter, independent of card pagination. */}
         <QuotaTimeline
-          entries={pageItems}
+          entries={sortedEntries}
           quotaFor={getQuota}
           displayNameFor={displayNameFor}
           resolvedTheme={resolvedTheme}
+          refreshing={loading || batchLoading}
+          disableControls={disableControls}
+          onRefreshAll={handleRefreshAll}
         />
       </section>
     </div>

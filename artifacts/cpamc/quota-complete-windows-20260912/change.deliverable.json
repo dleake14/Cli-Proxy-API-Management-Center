@@ -1,0 +1,10 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "Complete current quota windows",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {"primary": "change.md", "source": "cpamc-change.json", "supporting": ["validation.log", "diff.patch", "proof.html"]},
+  "scope": {"must_cover": ["complete current quota windows", "Cursor", "Central", "zoom", "rollback"]},
+  "floors": {"min_words": 100},
+  "forbidden_tokens": ["TODO", "Lorem ipsum"]
+}

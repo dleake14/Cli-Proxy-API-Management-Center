@@ -15,6 +15,7 @@ import { AntigravityQuotaBody } from '@/features/quota/providers/antigravity/Ant
 import { CodexQuotaBody } from '@/features/quota/providers/codex/CodexQuotaBody';
 import { ClaudeQuotaBody } from '@/features/quota/providers/claude/ClaudeQuotaBody';
 import { KimiQuotaBody } from '@/features/quota/providers/kimi/KimiQuotaBody';
+import { MuseQuotaBody } from '@/features/quota/providers/muse/MuseQuotaBody';
 import { XaiQuotaBody } from '@/features/quota/providers/xai/XaiQuotaBody';
 import { QUOTA_CLASS_KEYS, bindQuotaClasses } from '@/features/quota/types';
 import { formatInstantShort } from '@/utils/quota';
@@ -24,6 +25,7 @@ import type {
   ClaudeQuotaState,
   CodexQuotaState,
   KimiQuotaState,
+  MuseQuotaState,
   XaiQuotaState,
 } from '@/types';
 
@@ -265,6 +267,29 @@ describe('AntigravityQuotaBody', () => {
 
     expect(markup).toContain('Gemini models');
     expect(markup).not.toContain('Claude and GPT models');
+  });
+});
+
+describe('MuseQuotaBody', () => {
+  test('shows the source used percentage when High Usage is exhausted', () => {
+    const quota: MuseQuotaState = {
+      status: 'success',
+      rows: [
+        {
+          id: 'weekly',
+          label: 'High Usage',
+          used: 100,
+          limit: 100,
+          resetAtMs: now + HOUR_MS,
+          periodHours: 168,
+        },
+      ],
+    };
+    const markup = renderToStaticMarkup(createElement(MuseQuotaBody, { quota, classes }));
+
+    expect(markup).toContain('High Usage');
+    expect(markup).toContain('100% used');
+    expect(markup).toContain('style="width:0%;--meter-index:0"');
   });
 });
 

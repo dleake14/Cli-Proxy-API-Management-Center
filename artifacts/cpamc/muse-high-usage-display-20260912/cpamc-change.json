@@ -1,0 +1,70 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "Muse Code High Usage weekly 100% used reading",
+      "CPAMC displays the actual used percentage",
+      "remaining capacity meter remains accurate",
+      "no CPAMC relaunch",
+      "deterministic regression test",
+      "local UI proof",
+      "rollback"
+    ]
+  },
+  "baseline": {
+    "branch": "main",
+    "baseline_ref": "git:100b82ce687387d4a31155b9fb95c1887d5514fc with preserved pre-existing CPAMC WIP",
+    "status_recorded": "existing dirty worktree preserved before this change"
+  },
+  "changed_files": [
+    "src/features/quota/providers/muse/MuseQuotaBody.tsx",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/ru.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "tests/quotaBodyRendering.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": ["proof/muse-high-usage-100.html"]
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/muse-high-usage-display-20260912/diff.patch",
+    "baseline_ref": "git:100b82ce687387d4a31155b9fb95c1887d5514fc plus preserved pre-existing WIP"
+  },
+  "ui_change": true,
+  "proof": {
+    "browser": "deterministic React server render",
+    "route": "QuotaPage Muse card",
+    "viewport": "DOM contract",
+    "console_error_count": 0,
+    "cpamc_relaunched": false
+  },
+  "sources": [
+    "src/features/quota/providers/muse/MuseQuotaBody.tsx",
+    "src/i18n/locales/en.json",
+    "tests/quotaBodyRendering.test.ts"
+  ],
+  "checks": {
+    "required_paths": [
+      "src/features/quota/providers/muse/MuseQuotaBody.tsx",
+      "tests/quotaBodyRendering.test.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/providers/muse/MuseQuotaBody.tsx",
+        "contains": "muse_quota.used_percent"
+      },
+      {
+        "path": "tests/quotaBodyRendering.test.ts",
+        "contains": "100% used"
+      }
+    ],
+    "forbidden_text": []
+  }
+}

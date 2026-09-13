@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Muse High Usage exhausted proof</title>
+    <style>
+      body { color: #202124; font: 16px system-ui, sans-serif; margin: 2rem; }
+      .proof { border: 1px solid #d0d7de; border-radius: 8px; max-width: 38rem; padding: 1rem; }
+      .quotaRow { border: 1px solid #d0d7de; border-radius: 6px; padding: .75rem; }
+      .quotaRowHeader { align-items: center; display: flex; justify-content: space-between; gap: 1rem; }
+      .quotaMeta { display: flex; gap: .75rem; }
+      .quotaBar { background: #eef0f2; border-radius: 999px; height: .5rem; margin-top: .75rem; }
+      .quotaBarFill { height: 100%; }
+      .quotaBarFillLow { background: #c62828; }
+    </style>
+  </head>
+  <body>
+    <main class="proof">
+      <h1>Muse Code High Usage</h1>
+      <p>Deterministic React server render with weekly used 100 and limit 100.</p>
+      <div id="muse-card">
+        <div class="quotaRow"><div class="quotaRowHeader"><span class="quotaModel">High Usage</span><div class="quotaMeta"><span class="quotaPercent">100% used</span><span class="quotaReset">09/12, 10:07</span><span class="quotaResetRelative">in 1 hour</span></div></div><div class="quotaBar"><div class="quotaBarFill quotaBarFillLow" style="width:0%;--meter-index:0"></div></div></div>
+      </div>
+      <p>Assertion: the source used value is visible while the remaining capacity meter is 0%.</p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "live Codex seven-day reset verified as 2026-09-19 05:30 America/Chicago",
+      "reset-credit expiration separated from quota reset",
+      "forward-looking quota windows redraw",
+      "all visible provider reset transformations audited",
+      "repeatable refresh and audit process",
+      "deterministic tests",
+      "browser or DOM proof",
+      "rollback"
+    ]
+  },
+  "changed_files": [
+    "package.json",
+    "docs/QUOTA-WINDOWS.md",
+    "tools/audit-quota-windows.ts",
+    "src/features/quota/QuotaPage.tsx",
+    "src/features/quota/quotaRefreshClock.ts",
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "src/features/quota/components/QuotaTimeline.module.scss",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/ru.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "tests/quotaRefreshClock.test.ts",
+    "tests/quotaTimeline.test.ts",
+    "tests/quotaTimelineRendering.test.ts"
+  ],
+  "validation": {"command": "bun run verify", "exit_code": 0, "log_path": "validation.log"},
+  "evidence": {"diff_path": "diff.patch", "proof_paths": ["proof.html"]},
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/quota-full-audit-20260912/diff.patch",
+    "baseline_ref": "git:100b82ce687387d4a31155b9fb95c1887d5514fc plus preserved pre-existing quota timeline work"
+  },
+  "ui_change": true,
+  "proof": {
+    "browser": "deterministic React server render",
+    "route": "QuotaTimeline",
+    "viewport": "DOM contract",
+    "console_error_count": 0
+  },
+  "checks": {
+    "required_paths": ["docs/QUOTA-WINDOWS.md", "tools/audit-quota-windows.ts"],
+    "required_text": [
+      {"path": "src/features/quota/components/QuotaTimeline.tsx", "contains": "America/Chicago"},
+      {"path": "tests/quotaTimelineRendering.test.ts", "contains": "2026-09-19T05:30:33-05:00"},
+      {"path": "package.json", "contains": "audit:quota"}
+    ],
+    "forbidden_text": []
+  }
+}

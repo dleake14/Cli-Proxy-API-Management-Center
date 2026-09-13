@@ -1,0 +1,231 @@
+--- a/src/features/quota/QuotaPage.tsx
++++ b/src/features/quota/QuotaPage.tsx
+@@ -43,7 +43,7 @@
+   type QuotaFileEntry,
+ } from './logic';
+ import { nextRecoveryMs } from './resetSchedule';
+-import { quotaRefreshBucket } from './quotaRefreshClock';
++import { createQuotaRefreshController } from './quotaRefreshClock';
+ import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers';
+ import type { QuotaProviderType } from './providers/types';
+ import { useQuotaActions } from './hooks/useQuotaActions';
+@@ -224,18 +224,45 @@
+   const { batchLoading, loadQuota } = useQuotaBatchLoader();
+   const { refreshQuota } = useQuotaActions(disableControls);
+ 
+-  const autoRefreshBucketRef = useRef<number | null>(null);
+-  const currentRefreshBucket = quotaRefreshBucket(tick);
+-
+-  // Load the visible quota rows immediately and refresh them every five
+-  // minutes. This also crosses midnight without a reload, so the timeline's
+-  // local-day axis and provider reset anchors cannot drift onto different days.
+-  useEffect(() => {
+-    if (loading || disableControls || entries.length === 0) return;
+-    if (autoRefreshBucketRef.current === currentRefreshBucket) return;
+-    autoRefreshBucketRef.current = currentRefreshBucket;
+-    void loadQuota(entries);
+-  }, [currentRefreshBucket, disableControls, loadQuota, loading, entries]);
++  const autoRefreshState = useRef({ loading, disableControls, batchLoading, entries, loadQuota });
++  const autoRefreshController = useRef<ReturnType<typeof createQuotaRefreshController> | null>(null);
++
++  useEffect(() => {
++    autoRefreshState.current = { loading, disableControls, batchLoading, entries, loadQuota };
++    if (disableControls) autoRefreshController.current?.invalidate();
++    void autoRefreshController.current?.check();
++  }, [loading, disableControls, batchLoading, entries, loadQuota]);
++
++  useEffect(() => {
++    const controller = createQuotaRefreshController({
++      now: Date.now,
++      ready: () => {
++        const state = autoRefreshState.current;
++        return !state.loading && !state.disableControls && !state.batchLoading && state.entries.length > 0;
++      },
++      refresh: () => {
++        const state = autoRefreshState.current;
++        return state.loadQuota(state.entries, true);
++      },
++    });
++    autoRefreshController.current = controller;
++    const check = () => { void controller.check(); };
++    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
++    // Polling checks readiness; provider requests still run at most once per
++    // five minutes. Focus/online catch up immediately after browser suspension.
++    const timer = window.setInterval(check, 15_000);
++    window.addEventListener('focus', check);
++    window.addEventListener('online', check);
++    document.addEventListener('visibilitychange', onVisible);
++    check();
++    return () => {
++      window.clearInterval(timer);
++      window.removeEventListener('focus', check);
++      window.removeEventListener('online', check);
++      document.removeEventListener('visibilitychange', onVisible);
++      autoRefreshController.current = null;
++    };
++  }, []);
+ 
+   const pendingRefreshRef = useRef(false);
+   const prevLoadingRef = useRef(loading);
+--- a/src/features/quota/quotaRefreshClock.ts
++++ b/src/features/quota/quotaRefreshClock.ts
+@@ -12,3 +12,38 @@
+   return Math.floor(nowMs / QUOTA_AUTO_REFRESH_MS);
+ }
+ 
++/** A due refresh stays due when the loader is busy or disconnected. */
++export function createQuotaRefreshController(options: {
++  now: () => number;
++  ready: () => boolean;
++  refresh: () => Promise<boolean>;
++}) {
++  let lastStartedAt: number | null = null;
++  let running = false;
++  let generation = 0;
++
++  return {
++    invalidate() {
++      generation += 1;
++      lastStartedAt = null;
++    },
++    async check(): Promise<void> {
++      const now = options.now();
++      if (running || !options.ready()) return;
++      if (lastStartedAt !== null && now >= lastStartedAt &&
++          now - lastStartedAt < QUOTA_AUTO_REFRESH_MS) return;
++      running = true;
++      const requestGeneration = generation;
++      try {
++        const accepted = await options.refresh();
++        if (accepted && requestGeneration === generation) lastStartedAt = now;
++      } catch {
++        // Provider errors are displayed by the loader. An unexpected failure
++        // must not disable subsequent automatic attempts or reject an event handler.
++        if (requestGeneration === generation) lastStartedAt = now;
++      } finally {
++        running = false;
++      }
++    },
++  };
++}
+--- a/src/features/quota/hooks/useQuotaBatchLoader.ts
++++ b/src/features/quota/hooks/useQuotaBatchLoader.ts
+@@ -31,9 +31,9 @@
+   const requestIdRef = useRef(0);
+ 
+   const loadQuota = useCallback(
+-    async (targets: QuotaFileEntry[]) => {
+-      if (loadingRef.current) return;
+-      if (targets.length === 0) return;
++    async (targets: QuotaFileEntry[], background = false): Promise<boolean> => {
++      if (loadingRef.current) return false;
++      if (targets.length === 0) return false;
+       loadingRef.current = true;
+       const requestId = ++requestIdRef.current;
+       const cacheGeneration = captureQuotaCacheGeneration();
+@@ -56,7 +56,11 @@
+               setQuota((prev) => {
+                 const nextState = { ...prev };
+                 entries.forEach(({ file }) => {
+-                  nextState[file.name] = adapter.buildLoadingState();
++                  // Keep successful readings and timeline geometry visible while
++                  // the automatic refresh is in flight. Errors still replace them.
++                  if (!background || prev[file.name]?.status !== 'success') {
++                    nextState[file.name] = adapter.buildLoadingState();
++                  }
+                 });
+                 return nextState;
+               });
+@@ -98,6 +102,7 @@
+             });
+           })
+         );
++        return true;
+       } finally {
+         if (requestId === requestIdRef.current) {
+           setBatchLoading(false);
+--- a/tests/quotaRefreshClock.test.ts
++++ b/tests/quotaRefreshClock.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, expect, test } from 'bun:test';
+ import {
+   QUOTA_AUTO_REFRESH_MS,
++  createQuotaRefreshController,
+   quotaRefreshBucket,
+ } from '@/features/quota/quotaRefreshClock';
+ 
+@@ -24,3 +25,74 @@
+     expect(quotaRefreshBucket(afterMidnight)).not.toBe(quotaRefreshBucket(beforeMidnight));
+   });
+ });
++
++describe('automatic quota refresh', () => {
++  test('loads initially and every five minutes without manual actions', async () => {
++    let now = 1000;
++    let calls = 0;
++    const controller = createQuotaRefreshController({now:()=>now, ready:()=>true,
++      refresh:async()=>{calls += 1; return true;}});
++    await controller.check();
++    expect(calls).toBe(1);
++    now += QUOTA_AUTO_REFRESH_MS - 1;
++    await controller.check();
++    expect(calls).toBe(1);
++    now += 1;
++    await controller.check();
++    expect(calls).toBe(2);
++    now += 3 * QUOTA_AUTO_REFRESH_MS;
++    await controller.check(); // wake from sleep: one catch-up, no request burst
++    expect(calls).toBe(3);
++  });
++
++  test('busy or disconnected loaders do not swallow a due refresh', async () => {
++    let ready = false;
++    let accepted = false;
++    let calls = 0;
++    const controller = createQuotaRefreshController({now:()=>1000, ready:()=>ready,
++      refresh:async()=>{calls += 1; return accepted;}});
++    await controller.check();
++    expect(calls).toBe(0);
++    ready = true;
++    await controller.check();
++    expect(calls).toBe(1);
++    accepted = true;
++    await controller.check();
++    expect(calls).toBe(2);
++    await controller.check();
++    expect(calls).toBe(2);
++    controller.invalidate(); // reconnect in the same five-minute period
++    await controller.check();
++    expect(calls).toBe(3);
++  });
++
++  test('focus and timer events cannot overlap requests; reconnect invalidates old completion', async () => {
++    let finish!: (value:boolean)=>void;
++    let calls = 0;
++    const controller = createQuotaRefreshController({now:()=>1000, ready:()=>true,
++      refresh:()=>{calls += 1;return new Promise<boolean>(resolve=>{finish=resolve;});}});
++    const pending = controller.check();
++    await controller.check();
++    expect(calls).toBe(1);
++    controller.invalidate();
++    finish(true);
++    await pending;
++    const next = controller.check();
++    expect(calls).toBe(2);
++    finish(true);
++    await next;
++  });
++
++  test('unexpected errors retry on the next cadence instead of stopping the timer', async () => {
++    let now = 1000;
++    let calls = 0;
++    const controller = createQuotaRefreshController({now:()=>now,ready:()=>true,
++      refresh:async()=>{calls += 1;throw new Error('temporary outage');}});
++    await controller.check();
++    await controller.check();
++    expect(calls).toBe(1);
++    now += QUOTA_AUTO_REFRESH_MS;
++    await controller.check();
++    expect(calls).toBe(2);
++  });
++});

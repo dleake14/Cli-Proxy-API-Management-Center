@@ -21,6 +21,24 @@ const baseProps = {
 };
 
 describe('QuotaTimeline rendering', () => {
+  test('default render contains both ends of the current quota and preserves weekly selection at close zoom', () => {
+    const reset = Date.parse('2026-09-19T05:30:33-05:00');
+    const props = {
+      ...baseProps,
+      entries: [{ file: { name: 'Codex', type: 'codex' }, type: 'codex' }] as QuotaFileEntry[],
+      now: Date.parse('2026-09-18T08:00:00-05:00'),
+      quotaFor: () => ({ status: 'success' as const, windows: [
+        { id: 'weekly', periodHours: 168, usedPercent: 20, resetAtMs: reset },
+        { id: 'five-hour', periodHours: 5, usedPercent: 10, resetAtMs: reset - 12 * 3600000 },
+      ] }),
+    };
+    const html = renderToStaticMarkup(createElement(QuotaTimeline, props));
+    expect(Number(html.match(/data-span-start-ms="(\d+)"/)![1])).toBeLessThanOrEqual(reset - 168 * 3600000);
+    expect(Number(html.match(/data-span-end-ms="(\d+)"/)![1])).toBeGreaterThan(reset);
+    expect(html).toContain('09/12 05:30 → 09/19 05:30');
+    const zoom = renderToStaticMarkup(createElement(QuotaTimeline, { ...props, initialZoomDays: 3 }));
+    expect(zoom).toContain(`data-next-reset-ms="${reset}"`);
+  });
   test('renders stacked Fable and all-models bars under one Claude credential', () => {
     const now = new Date(2026, 7, 1, 12).getTime();
     const reset = new Date(2026, 7, 5, 12).getTime();
@@ -168,7 +186,7 @@ describe('QuotaTimeline rendering', () => {
     );
 
     expect(markup).toContain('>57%<');
-    expect(markup).toContain('on-pace: 57% remaining');
+    expect(markup).toMatch(/title="[^"]*57%[^"]*"/);
   });
 
   test('renders the draggable zoom slider under the chart', () => {
@@ -216,12 +234,40 @@ describe('QuotaTimeline rendering', () => {
       })
     );
 
-    // The next weekly period starts on Sunday 08/02. The button remains the
+    // The next weekly period starts seven days after today, on 08/05. The button remains the
     // shortcut back to Today (aria-label/title), but its visible label now
     // reflects the period selected with the previous/next arrows.
     expect(markup).toMatch(
-      /<button type="button" aria-label="[^"]+" title="[^"]+">08\/02<\/button>/
+      /<button type="button" aria-label="[^"]+" title="[^"]+">08\/05<\/button>/
     );
+  });
+
+  test('shows the verified Codex reset and distinguishes reset-credit expiry', () => {
+    const now = new Date('2026-09-12T06:15:00-05:00').getTime();
+    const reset = new Date('2026-09-19T05:30:33-05:00').getTime();
+    const creditExpiry = '2026-09-21T00:24:10.776545Z'; // 09/20 19:24 America/Chicago
+    const markup = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        entries: [{ file: { name: 'Codex', type: 'codex' }, type: 'codex' }],
+        displayNameFor: (name: string) => name,
+        resolvedTheme: 'light',
+        now,
+        quotaFor: () => ({
+          status: 'success',
+          windows: [
+            { id: 'weekly', usedPercent: 1, resetAtMs: reset, periodHours: 168 },
+          ],
+          rateLimitResetCredits: [
+            { id: 'credit-1', status: 'available', expiresAt: creditExpiry },
+          ],
+        }),
+      })
+    );
+
+    expect(markup).toContain(`data-next-reset-ms="${reset}"`);
+    expect(markup).toContain('09/19 05:30');
+    expect(markup).toContain('09/20');
+    expect(markup).toContain('data-today="1"');
   });
 
   test('keeps the panel and controls visible when 5-hour mode has no matching lanes', () => {
@@ -324,7 +370,7 @@ describe('QuotaTimeline rendering', () => {
     );
 
     expect(markup).toContain('role="img"');
-    expect(markup).toContain('08/03 12:00');
+    expect(markup).toContain('08/03 07:00');
   });
 
   test('stays hidden before any credential exposes a usable quota window', () => {
@@ -336,5 +382,63 @@ describe('QuotaTimeline rendering', () => {
     );
 
     expect(markup).toBe('');
+  });
+
+  describe('windows-section refresh action', () => {
+    const windowProps = {
+      ...baseProps,
+      quotaFor: () => ({
+        status: 'success' as const,
+        windows: [
+          {
+            id: 'seven-day',
+            label: 'All models',
+            usedPercent: 41,
+            resetAtMs: new Date(2026, 6, 31, 12).getTime(),
+            periodHours: 168,
+          },
+        ],
+      }),
+    };
+
+    test('renders the page refresh action inside the timeline header', () => {
+      const markup = renderToStaticMarkup(
+        createElement(QuotaTimeline, { ...windowProps, onRefreshAll: () => {} })
+      );
+
+      expect(markup).toContain('data-quota-windows-refresh="1"');
+      expect(markup).not.toContain('data-quota-windows-refresh="1" disabled');
+    });
+
+    test('carries no refresh button when the page owns no handler', () => {
+      const markup = renderToStaticMarkup(createElement(QuotaTimeline, windowProps));
+
+      expect(markup).not.toContain('data-quota-windows-refresh');
+    });
+
+    test('disables the refresh action while a refresh is in flight', () => {
+      const markup = renderToStaticMarkup(
+        createElement(QuotaTimeline, { ...windowProps, refreshing: true, onRefreshAll: () => {} })
+      );
+
+      expect(markup).toContain('data-quota-windows-refresh="1" disabled=""');
+    });
+  });
+});
+
+describe('stacked quota expiry', () => {
+  test('does not carry Fable usage into an unreported week', () => {
+    const reset = Date.parse('2026-09-16T02:00:00-05:00');
+    const markup = renderToStaticMarkup(createElement(QuotaTimeline, {
+      ...baseProps,
+      now: reset + 1000,
+      quotaFor: () => ({ status:'success', windows:[
+        {id:'seven-day-fable', label:'Fable', periodHours:168, resetAtMs:reset, usedPercent:15},
+        {id:'seven-day', label:'All models', periodHours:168, resetAtMs:reset, usedPercent:20},
+      ]}),
+    }));
+    expect(markup).not.toContain('<b>85%</b>');
+    expect(markup).not.toContain('85% remaining');
+    expect(markup).toContain('data-window-state="live"');
   });
 });

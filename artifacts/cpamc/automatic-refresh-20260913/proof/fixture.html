@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><title>Automatic quota refresh proof</title></head><body><div id="proof-root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/i18n/index.ts';
+import '/src/styles/global.scss';
+import {QuotaPage} from '/src/features/quota/QuotaPage.tsx';
+import {useAuthStore} from '/src/stores/index.ts';
+import {authFilesApi} from '/src/services/api/index.ts';
+import {QUOTA_ADAPTERS} from '/src/features/quota/providers/index.ts';
+const actualNow=Date.now;
+let offset=0;
+Date.now=()=>actualNow()+offset;
+window.proof={calls:{},advance:ms=>{offset+=ms;},poll:()=>{},hold:false,release:()=>{}};
+const actualInterval=window.setInterval.bind(window);
+window.setInterval=(fn,ms,...args)=>{if(ms===15000)window.proof.poll=fn;return actualInterval(fn,ms,...args);};
+authFilesApi.list=async()=>({files:[{name:'Claude proof',type:'claude',auth_index:'fixture'}]});
+for (const [type,adapter] of Object.entries(QUOTA_ADAPTERS)) {
+ adapter.fetchQuota=async()=>{
+  window.proof.calls[type]=(window.proof.calls[type]??0)+1;
+  if(type==='claude'&&window.proof.hold)await new Promise(resolve=>{window.proof.release=resolve;});
+  return type==='claude'?{windows:[{id:'seven-day-fable',label:'Fable',usedPercent:15,periodHours:168,resetAtMs:Date.parse('2026-09-16T07:00:00Z')}]}:[];
+ };
+}
+useAuthStore.setState({connectionStatus:'connected'});
+ReactDOM.createRoot(document.getElementById('proof-root')).render(React.createElement(QuotaPage));
+</script></body></html>

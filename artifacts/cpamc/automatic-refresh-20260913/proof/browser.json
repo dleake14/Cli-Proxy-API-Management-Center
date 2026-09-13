@@ -1,0 +1,21 @@
+{
+  "initial": {
+    "claude": 1,
+    "cursor": 1,
+    "muse": 1
+  },
+  "during": {
+    "calls": {
+      "claude": 2,
+      "cursor": 2,
+      "muse": 2
+    },
+    "live": 1
+  },
+  "afterSleep": {
+    "claude": 3,
+    "cursor": 3,
+    "muse": 3
+  },
+  "errors": []
+}

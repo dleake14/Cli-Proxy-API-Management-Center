@@ -1,0 +1,32 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC zoom and quota reliability",
+  "kind": "markdown_doc",
+  "produced_by": "cpamc-fork-modification",
+  "artifacts": {
+    "primary": "review.md",
+    "source": "cpamc-change.json",
+    "supporting": [
+      "validation.log",
+      "diff.patch",
+      "proof/browser.json"
+    ]
+  },
+  "scope": {
+    "must_cover": [
+      "zoom",
+      "Claude",
+      "Wednesday",
+      "remaining",
+      "stale",
+      "rollback"
+    ]
+  },
+  "floors": {
+    "min_words": 120
+  },
+  "forbidden_tokens": [
+    "TODO",
+    "Lorem ipsum"
+  ]
+}

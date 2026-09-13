@@ -28,11 +28,13 @@ export function MuseQuotaBody({ quota, classes }: QuotaBodyProps<MuseQuotaState>
   return (
     <>
       {rows.map((row, index) => {
+        const used = Math.max(0, Math.min(100, Math.round(row.used)));
         const remaining =
           row.limit > 0
             ? Math.max(0, Math.min(100, Math.round(((row.limit - row.used) / row.limit) * 100)))
             : null;
-        const percentLabel = remaining === null ? '--' : `${remaining}%`;
+        const percentLabel =
+          remaining === null ? '--' : t('muse_quota.used_percent', { percent: used });
         const resetDisplay = buildResetDisplay(null, row.resetAtMs, now, i18n.resolvedLanguage);
         const soon = row.id === soonestRowId;
         return (

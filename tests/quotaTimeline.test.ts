@@ -4,6 +4,8 @@ import {
   HOUR_MS,
   buildTimelineLane,
   buildTimelineLanes,
+  currentWindowSpan,
+  addCalendarDays,
   extendSpanToCoverNextWindows,
   laneHasWindow,
   pickLaneWindow,
@@ -17,10 +19,63 @@ import {
   TIMELINE_ZOOM_BOUNDS,
   scheduledRemainingAt,
   windowsIn,
+  zoomCurrentSpan,
+  visibleUsedPercent,
 } from '../src/features/quota/quotaTimelineModel';
 import type { TimelineLane } from '../src/features/quota/quotaTimelineModel';
 
 const at = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m, d, h, min).getTime();
+
+describe('complete current windows', () => {
+  const now = Date.parse('2026-09-12T08:00:00-05:00');
+  const lane = (provider: TimelineLane['provider'], reset: string, periodHours = 168): TimelineLane => ({
+    name: provider, displayName: provider, provider, anchorMs: Date.parse(reset), periodHours,
+    remaining: 80, limits: [], resetCredits: [],
+  });
+
+  test('fits every weekly start and reset while keeping Cursor monthly scale bounded', () => {
+    const lanes = [lane('claude', '2026-09-16T02:00:00-05:00'),
+      lane('codex', '2026-09-19T05:30:33-05:00'),
+      lane('xai', '2026-09-16T16:28:00-05:00'),
+      lane('muse', '2026-09-13T19:00:00-05:00'),
+      lane('antigravity', '2026-09-14T12:00:00-05:00'),
+      lane('ollama', '2026-09-15T09:00:00-05:00'),
+      lane('kimi', '2026-09-18T12:00:00-05:00'),
+      lane('cursor', '2026-09-19T05:47:00-05:00', 720)];
+    const span = currentWindowSpan(lanes, now, 15);
+    expect(span.startMs).toBe(Date.parse('2026-09-06T00:00:00-05:00'));
+    for (const item of lanes.filter((item) => item.provider !== 'cursor')) {
+      const live = projectLane(item, span.startMs, span.endMs, now, 'weekly').find((w) => w.state === 'live')!;
+      expect(live.startMs).toBeGreaterThanOrEqual(span.startMs);
+      expect(live.endMs).toBeLessThanOrEqual(span.endMs);
+      expect(live.widthPercent).toBeCloseTo(100 * 168 * HOUR_MS / (span.endMs - span.startMs));
+    }
+  });
+
+  test('keeps a session that opened yesterday fully visible', () => {
+    const midnight = Date.parse('2026-09-12T00:10:00-05:00');
+    const session = lane('claude', '2026-09-12T02:00:00-05:00', 5);
+    const span = currentWindowSpan([session], midnight, 3);
+    expect(span.startMs).toBe(Date.parse('2026-09-11T00:00:00-05:00'));
+    expect(projectLane(session, span.startMs, span.endMs, midnight, 'session').find((w) => w.state === 'live')?.widthPercent)
+      .toBeCloseTo(100 * 5 / 72);
+  });
+
+  test('advances at the exact reset without carrying stale usage forward', () => {
+    const item = lane('codex', '2026-09-19T05:30:33-05:00');
+    const span = currentWindowSpan([item], item.anchorMs!, 15);
+    const live = projectLane(item, span.startMs, span.endMs, item.anchorMs!, 'weekly').find((w) => w.state === 'live')!;
+    expect(live.startMs).toBe(item.anchorMs!);
+    expect(live.endMs).toBe(item.anchorMs! + 168 * HOUR_MS);
+    expect(live.remaining).toBeNull();
+  });
+
+  test('calendar grid has distinct midnights across both DST changes', () => {
+    for (const [start, hours] of [['2026-03-08T00:00:00-06:00', 23], ['2026-11-01T00:00:00-05:00', 25]] as const) {
+      expect(addCalendarDays(Date.parse(start), 1) - Date.parse(start)).toBe(hours * HOUR_MS);
+    }
+  });
+});
 
 describe('windowsIn', () => {
   test('projects backwards and forwards from the anchor', () => {
@@ -69,17 +124,16 @@ describe('windowsIn', () => {
 describe('span boundaries', () => {
   test('startOfDay and startOfWeek land on local midnight', () => {
     const mid = at(2026, 6, 29, 14, 37);
-    expect(new Date(startOfDay(mid)).getHours()).toBe(0);
-    expect(new Date(startOfWeek(mid)).getDay()).toBe(0);
-    expect(new Date(startOfWeek(mid)).getHours()).toBe(0);
+    expect(new Date(startOfDay(mid)).toISOString()).toBe('2026-07-29T05:00:00.000Z');
+    expect(new Date(startOfWeek(mid)).toISOString()).toBe('2026-07-26T05:00:00.000Z');
   });
 
-  test('weekly span is a fortnight from the containing Sunday', () => {
+  test('weekly span starts today and looks fifteen days ahead', () => {
     const now = at(2026, 6, 29, 14, 0); // a Wednesday
     const span = timelineSpan('weekly', 0, now);
 
-    expect(new Date(span.startMs).getDay()).toBe(0);
-    expect(span.days).toBe(14);
+    expect(new Date(span.startMs).toISOString()).toBe('2026-07-29T05:00:00.000Z');
+    expect(span.days).toBe(15);
     expect(span.startMs).toBeLessThanOrEqual(now);
     expect(span.endMs).toBeGreaterThan(now);
   });
@@ -119,10 +173,16 @@ describe('span boundaries', () => {
   });
 
   test('spans a whole number of days even across a DST transition', () => {
-    // US DST springs forward 2026-03-08; a fixed +14*DAY_MS would land at 23:00.
+    // US DST springs forward 2026-03-08; fixed millisecond math would land at 23:00.
     const span = timelineSpan('weekly', 0, at(2026, 2, 10, 12));
-    expect(new Date(span.startMs).getHours()).toBe(0);
-    expect(new Date(span.endMs).getHours()).toBe(0);
+    const hour = (ms: number) =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        hour: '2-digit',
+        hourCycle: 'h23',
+      }).format(new Date(ms));
+    expect(hour(span.startMs)).toBe('00');
+    expect(hour(span.endMs)).toBe('00');
   });
 });
 
@@ -140,21 +200,22 @@ describe('extendSpanToCoverNextWindows', () => {
   });
 
   test('extends the weekly span to cover the full next window of the latest reset', () => {
-    // Sep 10, 2026 (Thu). Base fortnight is Sep 6 – Sep 20.
+    // Sep 10, 2026 (Thu). Base forward view is Sep 10 – Sep 25.
     const now = at(2026, 8, 10, 12);
     const base = timelineSpan('weekly', 0, now);
-    expect(base.days).toBe(14);
+    expect(base.days).toBe(15);
 
-    // Grok resets Wed Sep 16; its next window opens there and ends Wed Sep 23.
+    // A late reset opens Sep 24 and ends Oct 1, beyond the default view.
     const grok = lane({
       name: 'grok.json',
       displayName: 'Grok',
       provider: 'xai',
-      anchorMs: at(2026, 8, 16, 16, 28),
+      anchorMs: at(2026, 8, 24, 16, 28),
+      periodHours: 30 * 24,
     });
 
     const extended = extendSpanToCoverNextWindows(base, [grok], now);
-    expect(extended.endMs).toBeGreaterThanOrEqual(at(2026, 8, 23, 16, 28));
+    expect(extended.endMs).toBeGreaterThanOrEqual(at(2026, 9, 24, 16, 28));
     expect(extended.days).toBeGreaterThan(base.days);
     // Rounded up to a whole number of days from the same start.
     expect((extended.endMs - extended.startMs) % DAY_MS).toBe(0);
@@ -164,7 +225,7 @@ describe('extendSpanToCoverNextWindows', () => {
   test('returns the base span unchanged when no next window needs extension', () => {
     const now = at(2026, 8, 10, 12);
     const base = timelineSpan('weekly', 0, now);
-    // Next window ends Sep 19, inside the Sep 6 – Sep 20 base span.
+    // Next window ends Sep 19, inside the Sep 10 – Sep 25 base span.
     const lane = {
       name: 'a.json',
       displayName: 'Alice',
@@ -920,5 +981,60 @@ describe('buildTimelineLane', () => {
       },
     });
     expect(lane.anchorMs).toBeNull();
+  });
+});
+
+describe('zoom and quota clock regressions', () => {
+  const reset = Date.parse('2026-09-16T02:00:00-05:00');
+  const now = Date.parse('2026-09-13T10:00:00-05:00');
+  const window = { startMs: reset - 7 * DAY_MS, endMs: reset };
+
+  test('Wednesday 02:00 quota is 62% elapsed on Sunday, independent of zoom', () => {
+    expect(scheduledRemainingAt(now, window.startMs, reset)).toBe(38);
+    expect(85).toBeGreaterThan(scheduledRemainingAt(now, window.startMs, reset)!);
+    const lane: TimelineLane = { name: 'Claude', displayName: 'Claude', provider: 'claude',
+      anchorMs: reset, periodHours: 168, remaining: 85, limits: [], resetCredits: [] };
+    const fitted = currentWindowSpan([lane], now, 15);
+    for (let days = 3; days <= 30; days += 1) {
+      const span = zoomCurrentSpan(fitted, now, 'weekly', days);
+      expect(span.startMs).toBeLessThanOrEqual(now);
+      expect(span.endMs).toBeGreaterThan(now);
+      const live = projectLane(lane, span.startMs, span.endMs, now, 'weekly').find(w => w.state === 'live')!;
+      expect(live.startMs).toBe(window.startMs);
+      expect(live.endMs).toBe(reset);
+      expect(live.remaining).toBe(85);
+      expect(scheduledRemainingAt(now, live.startMs, live.endMs)).toBe(38);
+    }
+  });
+
+  test('clipped usage ends at the original window position, never restarts at the viewport', () => {
+    expect(visibleUsedPercent(window, 85, now - DAY_MS, reset + DAY_MS)).toBe(0);
+    expect(visibleUsedPercent(window, 50, window.startMs + 2 * DAY_MS, reset)).toBeCloseTo(30);
+    expect(visibleUsedPercent(window, 50, window.startMs, window.startMs + DAY_MS)).toBe(100);
+  });
+
+  test('rejects non-finite periods and clocks without hanging or drawing invalid percentages', () => {
+    expect(windowsIn(reset, Infinity, now, reset)).toEqual([]);
+    expect(windowsIn(reset, HOUR_MS, now, Infinity)).toEqual([]);
+    expect(scheduledRemainingAt(NaN, window.startMs, reset)).toBeNull();
+    expect(clampTimelineZoomDays('weekly', NaN)).toBe(15);
+  });
+
+  test('failed refresh does not resurrect retained stacked readings as successful', () => {
+    const lanes = buildTimelineLanes({name:'Claude', displayName:'Claude', provider:'claude',
+      quota: {status:'error', windows:[{id:'seven-day-fable', resetAtMs:reset, periodHours:168, usedPercent:15}]} as never,
+      maxPeriodHours:Infinity});
+    expect(lanes[0].anchorMs).toBeNull();
+    expect(lanes[0].stackedBars).toBeUndefined();
+  });
+
+  test('independent Claude pools keep their own reset clocks', () => {
+    const lanes = buildTimelineLanes({name:'Claude', displayName:'Claude', provider:'claude',
+      quota: {status:'success', windows:[
+        {id:'seven-day-fable', resetAtMs:reset, periodHours:168, usedPercent:15},
+        {id:'seven-day', resetAtMs:reset + DAY_MS, periodHours:168, usedPercent:20},
+      ]} as never, maxPeriodHours:Infinity});
+    expect(lanes.map(lane => lane.anchorMs)).toEqual([reset, reset + DAY_MS]);
+    expect(lanes.map(lane => lane.remaining)).toEqual([85,80]);
   });
 });

@@ -1,0 +1,49 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "CPAMC quota timeline uses the live local day instead of a stale page-load day",
+      "Codex reset metadata is refreshed from the provider after a reset",
+      "long-lived CPAMC tabs refresh quota windows automatically",
+      "deterministic regression coverage",
+      "browser proof",
+      "rollback"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/QuotaPage.tsx",
+    "src/features/quota/quotaRefreshClock.ts",
+    "tests/quotaRefreshClock.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": []
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/quota-clock-refresh-20260912/diff.patch",
+    "baseline_ref": "git:100b82ce687387d4a31155b9fb95c1887d5514fc with pre-existing quota timeline WIP recorded in git status"
+  },
+  "ui_change": false,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/quotaRefreshClock.ts",
+      "tests/quotaRefreshClock.test.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/QuotaPage.tsx",
+        "contains": "quotaRefreshBucket(tick)"
+      },
+      {
+        "path": "src/features/quota/quotaRefreshClock.ts",
+        "contains": "5 * 60_000"
+      }
+    ],
+    "forbidden_text": []
+  }
+}

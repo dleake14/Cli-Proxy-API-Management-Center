@@ -1,0 +1,234 @@
+diff --git a/src/features/quota/QuotaPage.tsx b/src/features/quota/QuotaPage.tsx
+index 5e19aaf..a8bb5b7 100644
+--- a/src/features/quota/QuotaPage.tsx
++++ b/src/features/quota/QuotaPage.tsx
+@@ -383,6 +383,9 @@ export function QuotaPage() {
+           quotaFor={getQuota}
+           displayNameFor={displayNameFor}
+           resolvedTheme={resolvedTheme}
++          refreshing={loading || batchLoading}
++          disableControls={disableControls}
++          onRefreshAll={handleRefreshAll}
+         />
+       </section>
+     </div>
+diff --git a/src/features/quota/components/QuotaTimeline.module.scss b/src/features/quota/components/QuotaTimeline.module.scss
+index 6bc6967..f2a022b 100644
+--- a/src/features/quota/components/QuotaTimeline.module.scss
++++ b/src/features/quota/components/QuotaTimeline.module.scss
+@@ -78,6 +78,60 @@ $lane-width: 210px;
+   }
+ }
+ 
++// Same ink pill as the page header's refresh_all_credentials, so the windows
++// section repeats the page-level action in the page-level voice.
++.refreshAction {
++  display: inline-flex;
++  align-items: center;
++  gap: 7px;
++  border: 0;
++  cursor: pointer;
++  background: var(--text-primary);
++  color: var(--bg-secondary);
++  border-radius: $radius-full;
++  padding: 8px 16px;
++  font: inherit;
++  font-size: 13px;
++  font-weight: 600;
++  line-height: 1;
++  transition:
++    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
++    background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
++    box-shadow var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
++
++  &:disabled {
++    cursor: not-allowed;
++    opacity: 0.55;
++  }
++
++  &:active:not(:disabled) {
++    transform: translateY(0) scale(0.97);
++  }
++
++  &:focus-visible {
++    outline: 2px solid var(--primary-color);
++    outline-offset: 2px;
++  }
++}
++
++.spinning {
++  animation: timeline-refresh-spin 0.8s linear infinite;
++}
++
++@keyframes timeline-refresh-spin {
++  to {
++    transform: rotate(360deg);
++  }
++}
++
++@media (hover: hover) and (pointer: fine) {
++  .refreshAction:hover:not(:disabled) {
++    transform: translateY(-1px);
++    background: color-mix(in srgb, var(--text-primary) 86%, var(--bg-secondary));
++    box-shadow: 0 12px 26px color-mix(in srgb, var(--text-primary) 22%, transparent);
++  }
++}
++
+ .chart {
+   border: 1px solid var(--border-color);
+   border-radius: $radius-lg;
+diff --git a/src/features/quota/components/QuotaTimeline.tsx b/src/features/quota/components/QuotaTimeline.tsx
+index dca8ba9..663363d 100644
+--- a/src/features/quota/components/QuotaTimeline.tsx
++++ b/src/features/quota/components/QuotaTimeline.tsx
+@@ -15,6 +15,7 @@
+ import { useMemo, useState } from 'react';
+ import type { CSSProperties } from 'react';
+ import { useTranslation } from 'react-i18next';
++import { IconRefreshCw } from '@/components/ui/icons';
+ import { formatRelativeInstant, TYPE_COLORS } from '@/utils/quota';
+ import { useNow } from '@/hooks/useNow';
+ import type { ResolvedTheme, ThemeColors } from '@/types';
+@@ -74,6 +75,14 @@ export interface QuotaTimelineProps {
+   initialOffset?: number;
+   /** Injectable initial zoom day-count for tests/screenshots. */
+   initialZoomDays?: number;
++  /**
++   * Refresh-all wiring, owned by the page. The windows panel shows the same
++   * credentials as the cards above, so it offers the same refresh action rather
++   * than a second, divergent fetch path.
++   */
++  refreshing?: boolean;
++  disableControls?: boolean;
++  onRefreshAll?: () => void;
+ }
+ 
+ export function QuotaTimeline({
+@@ -85,6 +94,9 @@ export function QuotaTimeline({
+   initialMode = 'weekly',
+   initialOffset = 0,
+   initialZoomDays,
++  refreshing = false,
++  disableControls = false,
++  onRefreshAll,
+ }: QuotaTimelineProps) {
+   const { t } = useTranslation();
+   const [mode, setMode] = useState<TimelineMode>(initialMode);
+@@ -248,6 +260,19 @@ export function QuotaTimeline({
+               </button>
+             ))}
+           </div>
++
++          {onRefreshAll && (
++            <button
++              type="button"
++              className={styles.refreshAction}
++              data-quota-windows-refresh="1"
++              onClick={onRefreshAll}
++              disabled={disableControls || refreshing}
++            >
++              <IconRefreshCw size={14} className={refreshing ? styles.spinning : undefined} />
++              {t('quota_management.windows_refresh', { defaultValue: 'Refresh' })}
++            </button>
++          )}
+         </div>
+       </header>
+ 
+diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
+index d376ff2..7112cbf 100644
+--- a/src/i18n/locales/en.json
++++ b/src/i18n/locales/en.json
+@@ -1195,6 +1195,7 @@
+     "windows_idle": "no window counting down",
+     "windows_empty_session": "No credentials on this page report a 5-hour quota window.",
+     "windows_now_pace": "{{label}} on-pace: {{percent}}% remaining",
++    "windows_refresh": "Refresh",
+     "windows_legend_current": "current window",
+     "windows_legend_upcoming": "upcoming",
+     "windows_legend_elapsed": "elapsed",
+diff --git a/src/i18n/locales/ru.json b/src/i18n/locales/ru.json
+index d4ef0fc..4ed0140 100644
+--- a/src/i18n/locales/ru.json
++++ b/src/i18n/locales/ru.json
+@@ -1182,6 +1182,7 @@
+     "windows_idle": "нет активного окна",
+     "windows_empty_session": "Ни одни учётные данные на этой странице не предоставляют 5-часовое окно квоты.",
+     "windows_now_pace": "{{label}} по графику: {{percent}}% осталось",
++    "windows_refresh": "Обновить",
+     "windows_legend_current": "текущее окно",
+     "windows_legend_upcoming": "предстоящее",
+     "windows_legend_elapsed": "прошедшее",
+diff --git a/src/i18n/locales/zh-CN.json b/src/i18n/locales/zh-CN.json
+index 14a2b29..82966ff 100644
+--- a/src/i18n/locales/zh-CN.json
++++ b/src/i18n/locales/zh-CN.json
+@@ -1195,6 +1195,7 @@
+     "windows_idle": "没有正在计时的窗口",
+     "windows_empty_session": "当前页面没有凭证提供 5 小时配额窗口。",
+     "windows_now_pace": "{{label}} 按进度：剩余 {{percent}}%",
++    "windows_refresh": "刷新",
+     "windows_legend_current": "当前窗口",
+     "windows_legend_upcoming": "即将开始",
+     "windows_legend_elapsed": "已结束",
+diff --git a/src/i18n/locales/zh-TW.json b/src/i18n/locales/zh-TW.json
+index fd35867..0b4bcdd 100644
+--- a/src/i18n/locales/zh-TW.json
++++ b/src/i18n/locales/zh-TW.json
+@@ -1221,6 +1221,7 @@
+     "windows_idle": "沒有正在計時的視窗",
+     "windows_empty_session": "目前頁面沒有憑證提供 5 小時配額視窗。",
+     "windows_now_pace": "{{label}} 按進度：剩餘 {{percent}}%",
++    "windows_refresh": "重新整理",
+     "windows_now_pace": "{{label}} 按進度：剩餘 {{percent}}%",
+     "windows_legend_current": "目前視窗",
+     "windows_legend_upcoming": "即將開始",
+diff --git a/tests/quotaTimelineRendering.test.ts b/tests/quotaTimelineRendering.test.ts
+index accc7fb..5553a52 100644
+--- a/tests/quotaTimelineRendering.test.ts
++++ b/tests/quotaTimelineRendering.test.ts
+@@ -337,4 +337,45 @@ describe('QuotaTimeline rendering', () => {
+ 
+     expect(markup).toBe('');
+   });
++
++  describe('windows-section refresh action', () => {
++    const windowProps = {
++      ...baseProps,
++      quotaFor: () => ({
++        status: 'success' as const,
++        windows: [
++          {
++            id: 'seven-day',
++            label: 'All models',
++            usedPercent: 41,
++            resetAtMs: new Date(2026, 6, 31, 12).getTime(),
++            periodHours: 168,
++          },
++        ],
++      }),
++    };
++
++    test('renders the page refresh action inside the timeline header', () => {
++      const markup = renderToStaticMarkup(
++        createElement(QuotaTimeline, { ...windowProps, onRefreshAll: () => {} })
++      );
++
++      expect(markup).toContain('data-quota-windows-refresh="1"');
++      expect(markup).not.toContain('data-quota-windows-refresh="1" disabled');
++    });
++
++    test('carries no refresh button when the page owns no handler', () => {
++      const markup = renderToStaticMarkup(createElement(QuotaTimeline, windowProps));
++
++      expect(markup).not.toContain('data-quota-windows-refresh');
++    });
++
++    test('disables the refresh action while a refresh is in flight', () => {
++      const markup = renderToStaticMarkup(
++        createElement(QuotaTimeline, { ...windowProps, refreshing: true, onRefreshAll: () => {} })
++      );
++
++      expect(markup).toContain('data-quota-windows-refresh="1" disabled=""');
++    });
++  });
+ });

@@ -1,0 +1,45 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "Muse Code High Usage CPAMC display fix",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": [
+      "validation.log",
+      "diff.patch",
+      "proof/muse-high-usage-100.html"
+    ]
+  },
+  "scope": {
+    "must_cover": [
+      "Muse Code High Usage",
+      "100% used",
+      "remaining capacity meter",
+      "Usage sidecar",
+      "CPAMC",
+      "no CPAMC relaunch",
+      "rollback",
+      "487 tests",
+      "0 failed"
+    ]
+  },
+  "floors": {
+    "min_words": 160,
+    "min_words_per_covered_term": null
+  },
+  "forbidden_tokens": [
+    "TODO",
+    "FIXME",
+    "OLLAMA_API_KEY=",
+    "Bearer "
+  ],
+  "rules": {
+    "self_contained": true,
+    "no_network_assets": true,
+    "local_assets_must_exist": true,
+    "require_no_truncation": true
+  },
+  "waivers": []
+}

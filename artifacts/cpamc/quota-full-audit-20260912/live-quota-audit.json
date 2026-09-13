@@ -1,0 +1,120 @@
+{
+  "ok": true,
+  "generatedAt": "2026-09-12T11:56:52.799Z",
+  "timezone": "America/Chicago",
+  "events": [
+    {
+      "provider": "Codex",
+      "window": "main",
+      "at": "2026-09-19T10:30:33.000Z",
+      "central": "Sat, 09/19/2026, 05:30",
+      "periodHours": 168,
+      "source": "live"
+    },
+    {
+      "provider": "Codex",
+      "window": "additional-0-primary",
+      "at": "2026-09-12T16:56:51.000Z",
+      "central": "Sat, 09/12/2026, 11:56",
+      "periodHours": 5,
+      "source": "live"
+    },
+    {
+      "provider": "Codex",
+      "window": "additional-0-secondary",
+      "at": "2026-09-19T11:56:51.000Z",
+      "central": "Sat, 09/19/2026, 06:56",
+      "periodHours": 168,
+      "source": "live"
+    },
+    {
+      "provider": "Codex",
+      "window": "reset-credit-expiry",
+      "at": "2026-09-21T00:24:10.776545Z",
+      "central": "Sun, 09/20/2026, 19:24",
+      "periodHours": null,
+      "source": "live"
+    },
+    {
+      "provider": "Codex",
+      "window": "reset-credit-expiry",
+      "at": "2026-10-04T05:36:13.984256Z",
+      "central": "Sun, 10/04/2026, 00:36",
+      "periodHours": null,
+      "source": "live"
+    },
+    {
+      "provider": "Codex",
+      "window": "reset-credit-expiry",
+      "at": "2026-10-05T04:20:25.220757Z",
+      "central": "Sun, 10/04/2026, 23:20",
+      "periodHours": null,
+      "source": "live"
+    },
+    {
+      "provider": "Claude",
+      "window": "five_hour",
+      "at": "2026-09-12T15:10:00.742019+00:00",
+      "central": "Sat, 09/12/2026, 10:10",
+      "periodHours": 5,
+      "source": "live"
+    },
+    {
+      "provider": "Claude",
+      "window": "seven_day",
+      "at": "2026-09-16T07:00:00.742038+00:00",
+      "central": "Wed, 09/16/2026, 02:00",
+      "periodHours": 168,
+      "source": "live"
+    },
+    {
+      "provider": "Grok",
+      "window": "USAGE_PERIOD_TYPE_WEEKLY",
+      "at": "2026-09-16T21:28:36.590651+00:00",
+      "central": "Wed, 09/16/2026, 16:28",
+      "periodHours": 168,
+      "source": "live"
+    },
+    {
+      "provider": "Cursor",
+      "window": "session",
+      "at": "2026-09-19T10:47:21.000Z",
+      "central": "Sat, 09/19/2026, 05:47",
+      "periodHours": 720,
+      "source": "live"
+    },
+    {
+      "provider": "Cursor",
+      "window": "weekly",
+      "at": "2026-09-19T10:47:21.000Z",
+      "central": "Sat, 09/19/2026, 05:47",
+      "periodHours": 720,
+      "source": "live"
+    },
+    {
+      "provider": "Cursor",
+      "window": "monthly",
+      "at": "2026-09-19T10:47:21.000Z",
+      "central": "Sat, 09/19/2026, 05:47",
+      "periodHours": 720,
+      "source": "live"
+    },
+    {
+      "provider": "Muse",
+      "window": "session",
+      "at": null,
+      "central": null,
+      "periodHours": 5,
+      "source": "live"
+    },
+    {
+      "provider": "Muse",
+      "window": "weekly",
+      "at": null,
+      "central": null,
+      "periodHours": 168,
+      "source": "live"
+    }
+  ],
+  "errors": []
+}

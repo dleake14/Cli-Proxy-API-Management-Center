@@ -1,0 +1,79 @@
+{
+  "browser": "local headless Chromium",
+  "timezone": "Asia/Tokyo",
+  "initial": {
+    "start": 1788670800000,
+    "end": 1789966800000,
+    "lanes": [
+      {
+        "name": "Claude",
+        "start": 1788937200000,
+        "end": 1789542000000,
+        "full": true
+      },
+      {
+        "name": "Codex",
+        "start": 1789209033000,
+        "end": 1789813833000,
+        "full": true
+      },
+      {
+        "name": "Grok",
+        "start": 1788989280000,
+        "end": 1789594080000,
+        "full": true
+      },
+      {
+        "name": "Cursor",
+        "start": 1787222820000,
+        "end": 1789814820000,
+        "full": false
+      },
+      {
+        "name": "Muse",
+        "start": 1788739200000,
+        "end": 1789344000000,
+        "full": true
+      },
+      {
+        "name": "Antigravity",
+        "start": 1788800400000,
+        "end": 1789405200000,
+        "full": true
+      },
+      {
+        "name": "Ollama",
+        "start": 1788876000000,
+        "end": 1789480800000,
+        "full": true
+      },
+      {
+        "name": "Kimi",
+        "start": 1789146000000,
+        "end": 1789750800000,
+        "full": true
+      }
+    ]
+  },
+  "session": {
+    "start": 1789189200000,
+    "end": 1789448400000,
+    "lanes": [
+      {
+        "name": "Claude",
+        "start": 1789207200000,
+        "end": 1789225200000,
+        "full": true
+      },
+      {
+        "name": "Codex",
+        "start": 1789207200000,
+        "end": 1789225200000,
+        "full": true
+      }
+    ]
+  },
+  "consoleErrors": [],
+  "mobilePageOverflow": false,
+  "zoomRestore": "passed"
+}

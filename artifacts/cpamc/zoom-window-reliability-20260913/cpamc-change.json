@@ -1,0 +1,68 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "zoom preserves quota window identity",
+      "fill clips actual full-window usage",
+      "Claude Wednesday 02:00 Central pace",
+      "stale stacked usage and malformed input reliability",
+      "regression tests and browser proof",
+      "preserve controls and rollback"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "src/features/quota/components/QuotaTimeline.module.scss",
+    "tests/quotaTimeline.test.ts",
+    "tests/quotaTimelineRendering.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "proof/zoom.png",
+      "proof/rendered.html"
+    ]
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/zoom-window-reliability-20260913/diff.patch",
+    "baseline_ref": "100b82ce687387d4a31155b9fb95c1887d5514fc plus baseline snapshots"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [],
+    "required_text": [],
+    "forbidden_text": []
+  },
+  "sources": [
+    "live-claude.json",
+    "baseline-status.txt",
+    "baseline.patch"
+  ],
+  "verification": {
+    "tests_passed": 493,
+    "tests_failed": 0,
+    "focused_passed": 70,
+    "lint_exit_code": 0,
+    "build_exit_code": 0,
+    "allocation": "lead only; router rejected enum arguments; no worker invoked"
+  },
+  "proof": {
+    "browser": "Browser Control Chromium",
+    "route": "actual QuotaTimeline component fixture on running Vite server",
+    "viewport": "recorded in proof/browser.json",
+    "console_error_count": 0,
+    "zoom_days": [
+      3,
+      7,
+      15,
+      30
+    ],
+    "limitation": "Authenticated management page opened login; provider reset and usage verified independently through the signed-in subscription session."
+  }
+}

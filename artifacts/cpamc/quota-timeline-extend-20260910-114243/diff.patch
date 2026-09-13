@@ -1,0 +1,234 @@
+diff --git a/src/features/quota/components/QuotaTimeline.tsx b/src/features/quota/components/QuotaTimeline.tsx
+index 287b77b..6c61d7c 100644
+--- a/src/features/quota/components/QuotaTimeline.tsx
++++ b/src/features/quota/components/QuotaTimeline.tsx
+@@ -21,6 +21,7 @@ import type { ResolvedTheme, ThemeColors } from '@/types';
+ import {
+   buildTimelineLane,
+   buildTimelineLanes,
++  extendSpanToCoverNextWindows,
+   laneHasWindow,
+   projectLane,
+   projectResetCredits,
+@@ -90,12 +91,12 @@ export function QuotaTimeline({
+   const tick = useNow(nowProp === undefined); // fixed clock: tests and screenshots
+   const now = nowProp ?? tick;
+ 
+-  const span = useMemo(() => timelineSpan(mode, offset, now), [mode, offset, now]);
++  const baseSpan = useMemo(() => timelineSpan(mode, offset, now), [mode, offset, now]);
+   const todayLabel = t('quota_management.windows_today', { defaultValue: 'Today' });
+   // This button doubles as the selected-period indicator and the shortcut back
+   // to the current period. Keeping its visible text hard-coded to "Today" made
+   // successful previous/next navigation look as though the date never changed.
+-  const navigationLabel = offset === 0 ? todayLabel : formatDay(span.startMs);
++  const navigationLabel = offset === 0 ? todayLabel : formatDay(baseSpan.startMs);
+ 
+   const laneInputs = useMemo(
+     () =>
+@@ -125,11 +126,20 @@ export function QuotaTimeline({
+             // Weekly mode prefers the longest readable window. Session mode
+             // asks specifically for a real 5-hour window; longer periods must
+             // not be reinterpreted as 5-hour resets.
+-            maxPeriodHours: mode === 'session' ? 5 : span.days * 24,
++            maxPeriodHours: mode === 'session' ? 5 : baseSpan.days * 24,
+           })
+         )
+         .filter((lane) => laneHasWindow(lane) && (mode !== 'session' || lane.periodHours === 5)),
+-    [laneInputs, mode, span.days]
++    [laneInputs, mode, baseSpan.days]
++  );
++
++  // Weekly mode extends the fixed fortnight so the full next window of the
++  // provider that resets latest is visible — a long window clipped at the span
++  // edge hides when capacity actually comes back. Session mode stays a fixed
++  // 3-day zoom.
++  const span = useMemo(
++    () => (mode === 'session' ? baseSpan : extendSpanToCoverNextWindows(baseSpan, lanes, now)),
++    [baseSpan, lanes, mode, now]
+   );
+ 
+   /** Weekly: one cell per day. Session: one per 6 hours. */
+@@ -175,7 +185,10 @@ export function QuotaTimeline({
+             {formatDay(span.startMs)} – {formatDay(span.endMs - DAY_MS)}
+             {' · '}
+             {mode === 'weekly'
+-              ? t('quota_management.windows_span_weekly', { defaultValue: 'two weeks' })
++              ? t('quota_management.windows_span_weekly', {
++                  defaultValue: '{{count}} days',
++                  count: span.days,
++                })
+               : t('quota_management.windows_span_session', { defaultValue: 'three days' })}
+             {offset === 0 &&
+               ` · ${t('quota_management.windows_current', { defaultValue: 'current' })}`}
+diff --git a/src/features/quota/quotaTimelineModel.ts b/src/features/quota/quotaTimelineModel.ts
+index 040cc64..82b66fe 100644
+--- a/src/features/quota/quotaTimelineModel.ts
++++ b/src/features/quota/quotaTimelineModel.ts
+@@ -142,6 +142,36 @@ export function timelineSpan(
+   return { startMs, endMs: end.getTime(), days };
+ }
+ 
++/**
++ * Extend a weekly span so it captures the full next window of the provider
++ * that resets latest.
++ *
++ * The fixed fortnight can clip a long window in half: the bar for the window
++ * that opens at the next reset is cut at the span edge, so the user can't see
++ * when capacity actually comes back. This pushes the span end out to the end of
++ * that next window (rounded up to a day boundary) so the full bar is visible.
++ * Session mode is left alone — it is a deliberate 3-day zoom.
++ */
++export function extendSpanToCoverNextWindows(
++  span: { startMs: number; endMs: number; days: number },
++  lanes: readonly TimelineLane[],
++  now: number
++): { startMs: number; endMs: number; days: number } {
++  let maxEnd = span.endMs;
++  for (const lane of lanes) {
++    if (lane.anchorMs === null || !lane.periodHours) continue;
++    const periodMs = lane.periodHours * HOUR_MS;
++    // The next reset at or after now, then the window that opens there.
++    const nextReset = lane.anchorMs + Math.ceil((now - lane.anchorMs) / periodMs) * periodMs;
++    const nextWindowEnd = nextReset + periodMs;
++    if (nextWindowEnd > maxEnd) maxEnd = nextWindowEnd;
++  }
++  if (maxEnd <= span.endMs) return span;
++
++  const days = Math.ceil((maxEnd - span.startMs) / DAY_MS);
++  return { startMs: span.startMs, endMs: span.startMs + days * DAY_MS, days };
++}
++
+ /**
+  * Project one lane's windows onto a span, clipped and positioned.
+  *
+diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
+index e48d5e9..0c95a14 100644
+--- a/src/i18n/locales/en.json
++++ b/src/i18n/locales/en.json
+@@ -1177,7 +1177,7 @@
+     "empty_title": "No quota-capable credentials",
+     "empty_desc": "Connect a Gemini, Claude, Codex, Grok, or Kimi credential to track its quota here.",
+     "windows_title": "Quota windows",
+-    "windows_span_weekly": "two weeks",
++    "windows_span_weekly": "{{count}} days",
+     "windows_span_session": "three days",
+     "windows_current": "current",
+     "windows_today": "Today",
+diff --git a/src/i18n/locales/ru.json b/src/i18n/locales/ru.json
+index fd4097b..ffe6089 100644
+--- a/src/i18n/locales/ru.json
++++ b/src/i18n/locales/ru.json
+@@ -1164,7 +1164,7 @@
+     "empty_title": "Нет учётных данных с квотами",
+     "empty_desc": "Подключите учётные данные Gemini, Claude, Codex, Grok или Kimi, чтобы отслеживать квоту здесь.",
+     "windows_title": "Окна квот",
+-    "windows_span_weekly": "две недели",
++    "windows_span_weekly": "{{count}} дней",
+     "windows_span_session": "три дня",
+     "windows_current": "текущий",
+     "windows_today": "Сегодня",
+diff --git a/src/i18n/locales/zh-CN.json b/src/i18n/locales/zh-CN.json
+index 83b7435..a0bbf0a 100644
+--- a/src/i18n/locales/zh-CN.json
++++ b/src/i18n/locales/zh-CN.json
+@@ -1177,7 +1177,7 @@
+     "empty_title": "暂无可查额度的凭证",
+     "empty_desc": "接入 Gemini、Claude、Codex、Grok 或 Kimi 凭证后即可在此查看额度。",
+     "windows_title": "配额窗口",
+-    "windows_span_weekly": "两周",
++    "windows_span_weekly": "{{count}} 天",
+     "windows_span_session": "三天",
+     "windows_current": "当前",
+     "windows_today": "今天",
+diff --git a/src/i18n/locales/zh-TW.json b/src/i18n/locales/zh-TW.json
+index 9d780ca..bd9700a 100644
+--- a/src/i18n/locales/zh-TW.json
++++ b/src/i18n/locales/zh-TW.json
+@@ -1203,7 +1203,7 @@
+     "empty_title": "暫無可查配額的憑證",
+     "empty_desc": "接入 Gemini、Claude、Codex、Grok 或 Kimi 憑證後即可在此查看配額。",
+     "windows_title": "配額視窗",
+-    "windows_span_weekly": "兩週",
++    "windows_span_weekly": "{{count}} 天",
+     "windows_span_session": "三天",
+     "windows_current": "目前",
+     "windows_today": "今天",
+diff --git a/tests/quotaTimeline.test.ts b/tests/quotaTimeline.test.ts
+index 909c08f..c7e130d 100644
+--- a/tests/quotaTimeline.test.ts
++++ b/tests/quotaTimeline.test.ts
+@@ -4,6 +4,7 @@ import {
+   HOUR_MS,
+   buildTimelineLane,
+   buildTimelineLanes,
++  extendSpanToCoverNextWindows,
+   laneHasWindow,
+   pickLaneWindow,
+   projectLane,
+@@ -99,6 +100,66 @@ describe('span boundaries', () => {
+   });
+ });
+ 
++describe('extendSpanToCoverNextWindows', () => {
++  const lane = (over: Partial<TimelineLane> = {}): TimelineLane => ({
++    name: 'a.json',
++    displayName: 'Alice',
++    provider: 'claude',
++    anchorMs: at(2026, 8, 16, 20),
++    periodHours: 24 * 7,
++    remaining: 50,
++    limits: [],
++    resetCredits: [],
++    ...over,
++  });
++
++  test('extends the weekly span to cover the full next window of the latest reset', () => {
++    // Sep 10, 2026 (Thu). Base fortnight is Sep 6 – Sep 20.
++    const now = at(2026, 8, 10, 12);
++    const base = timelineSpan('weekly', 0, now);
++    expect(base.days).toBe(14);
++
++    // Grok resets Wed Sep 16; its next window opens there and ends Wed Sep 23.
++    const grok = lane({
++      name: 'grok.json',
++      displayName: 'Grok',
++      provider: 'xai',
++      anchorMs: at(2026, 8, 16, 16, 28),
++    });
++
++    const extended = extendSpanToCoverNextWindows(base, [grok], now);
++    expect(extended.endMs).toBeGreaterThanOrEqual(at(2026, 8, 23, 16, 28));
++    expect(extended.days).toBeGreaterThan(base.days);
++    // Rounded up to a whole number of days from the same start.
++    expect((extended.endMs - extended.startMs) % DAY_MS).toBe(0);
++    expect(extended.startMs).toBe(base.startMs);
++  });
++
++  test('returns the base span unchanged when no next window needs extension', () => {
++    const now = at(2026, 8, 10, 12);
++    const base = timelineSpan('weekly', 0, now);
++    // Next window ends Sep 19, inside the Sep 6 – Sep 20 base span.
++    const lane = {
++      name: 'a.json',
++      displayName: 'Alice',
++      provider: 'claude',
++      anchorMs: at(2026, 8, 12, 20),
++      periodHours: 24 * 7,
++      remaining: 50,
++      limits: [],
++      resetCredits: [],
++    };
++    expect(extendSpanToCoverNextWindows(base, [lane], now)).toBe(base);
++  });
++
++  test('ignores lanes with no anchor or period', () => {
++    const now = at(2026, 8, 10, 12);
++    const base = timelineSpan('weekly', 0, now);
++    const empty = lane({ anchorMs: null, periodHours: null });
++    expect(extendSpanToCoverNextWindows(base, [empty], now)).toBe(base);
++  });
++});
++
+ describe('projectLane', () => {
+   const lane = (over: Partial<TimelineLane> = {}): TimelineLane => ({
+     name: 'a.json',

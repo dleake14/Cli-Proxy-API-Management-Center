@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IconRefreshCw } from '@/components/ui/icons';
 import { formatRelativeInstant, TYPE_COLORS } from '@/utils/quota';
 import { useNow } from '@/hooks/useNow';
 import type { ResolvedTheme, ThemeColors } from '@/types';
@@ -25,9 +26,12 @@ import {
   projectLane,
   projectResetCredits,
   scheduledRemainingAt,
+  currentWindowSpan,
+  addCalendarDays,
   timelineSpanZoomed,
+  zoomCurrentSpan,
+  visibleUsedPercent,
   TIMELINE_ZOOM_BOUNDS,
-  DAY_MS,
 } from '../quotaTimelineModel';
 import type { TimelineLane, TimelineMode } from '../quotaTimelineModel';
 import type { QuotaFileEntry } from '../logic';
@@ -35,6 +39,16 @@ import type { QuotaCardState } from '../providers';
 import styles from './QuotaTimeline.module.scss';
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+const TIMELINE_TIME_ZONE = 'America/Chicago';
+const EN_WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
 
 const TIMELINE_ACCENTS = {
   claude: { light: '#c05621', dark: '#e8a882' },
@@ -45,16 +59,35 @@ const TIMELINE_ACCENTS = {
   codex: { light: '#3538d4', dark: '#a5b4fc' },
 } as const;
 
-const pad = (value: number) => String(value).padStart(2, '0');
+const centralParts = (ms: number) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIMELINE_TIME_ZONE,
+    weekday: 'short',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(ms));
+  const read = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return {
+    month: read('month'),
+    day: read('day'),
+    hour: read('hour'),
+    minute: read('minute'),
+    weekday: read('weekday'),
+  };
+};
 
 const formatDay = (ms: number) => {
-  const d = new Date(ms);
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+  const part = centralParts(ms);
+  return `${part.month}/${part.day}`;
 };
 const formatTime = (ms: number) => {
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const part = centralParts(ms);
+  return `${part.hour}:${part.minute}`;
 };
+const weekdayIndex = (ms: number) => EN_WEEKDAY_INDEX[centralParts(ms).weekday] ?? 0;
 
 export interface QuotaTimelineProps {
   entries: QuotaFileEntry[];
@@ -74,6 +107,14 @@ export interface QuotaTimelineProps {
   initialOffset?: number;
   /** Injectable initial zoom day-count for tests/screenshots. */
   initialZoomDays?: number;
+  /**
+   * Refresh-all wiring, owned by the page. The windows panel shows the same
+   * credentials as the cards above, so it offers the same refresh action rather
+   * than a second, divergent fetch path.
+   */
+  refreshing?: boolean;
+  disableControls?: boolean;
+  onRefreshAll?: () => void;
 }
 
 export function QuotaTimeline({
@@ -85,10 +126,14 @@ export function QuotaTimeline({
   initialMode = 'weekly',
   initialOffset = 0,
   initialZoomDays,
+  refreshing = false,
+  disableControls = false,
+  onRefreshAll,
 }: QuotaTimelineProps) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<TimelineMode>(initialMode);
   const [offset, setOffset] = useState(initialOffset);
+  const [fitCurrent, setFitCurrent] = useState(initialZoomDays === undefined);
   const [zoomDays, setZoomDays] = useState(
     initialZoomDays ?? TIMELINE_ZOOM_BOUNDS[initialMode].default
   );
@@ -140,36 +185,48 @@ export function QuotaTimeline({
             // Weekly mode prefers the longest readable window. Session mode
             // asks specifically for a real 5-hour window; longer periods must
             // not be reinterpreted as 5-hour resets.
-            maxPeriodHours: mode === 'session' ? 5 : baseSpan.days * 24,
+            maxPeriodHours: mode === 'session' ? 5 : Infinity,
           })
         )
         .filter((lane) => laneHasWindow(lane) && (mode !== 'session' || lane.periodHours === 5)),
-    [laneInputs, mode, baseSpan.days, now]
+    [laneInputs, mode, now]
   );
 
-  // The slider is the sole authority on visible width — no auto-extend past it.
-  const span = baseSpan;
+  const span = useMemo(
+    () => {
+      if (offset !== 0) return baseSpan;
+      const current = currentWindowSpan(lanes, now, TIMELINE_ZOOM_BOUNDS[mode].default);
+      return fitCurrent ? current : zoomCurrentSpan(current, now, mode, zoomDays);
+    },
+    [fitCurrent, offset, lanes, now, mode, baseSpan, zoomDays]
+  );
+  const displayedZoom = fitCurrent && offset === 0 ? span.days : zoomDays;
 
   /** Weekly: one cell per day. Session: one per 6 hours. */
   const cells = useMemo(() => {
     const zoomed = mode === 'session';
     const count = zoomed ? span.days * 4 : span.days;
-    const cellMs = (span.endMs - span.startMs) / count;
-    const todayStart = new Date(now).setHours(0, 0, 0, 0);
+    const todayKey = formatDay(now);
 
     return Array.from({ length: count }, (_, index) => {
-      const at = span.startMs + index * cellMs;
-      const date = new Date(at);
-      const isDayStart = !zoomed || date.getHours() === 0;
+      const day = Math.floor(index / (zoomed ? 4 : 1));
+      const dayStart = addCalendarDays(span.startMs, day);
+      const dayEnd = addCalendarDays(span.startMs, day + 1);
+      const at = dayStart + (zoomed ? (index % 4) * (dayEnd - dayStart) / 4 : 0);
+      const date = centralParts(at);
+      const isDayStart = !zoomed || date.hour === '00';
+      const dayIndex = weekdayIndex(at);
       return {
         at,
+        widthPercent: ((dayEnd - dayStart) / (zoomed ? 4 : 1)) /
+          (span.endMs - span.startMs) * 100,
         isDayStart,
-        isToday: new Date(at).setHours(0, 0, 0, 0) === todayStart,
-        isWeekend: date.getDay() === 0 || date.getDay() === 6,
-        weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[date.getDay()]}`, {
-          defaultValue: WEEKDAY_KEYS[date.getDay()],
+        isToday: formatDay(at) === todayKey,
+        isWeekend: dayIndex === 0 || dayIndex === 6,
+        weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[dayIndex]}`, {
+          defaultValue: WEEKDAY_KEYS[dayIndex],
         }),
-        label: isDayStart ? formatDay(at) : `${pad(date.getHours())}:00`,
+        label: isDayStart ? formatDay(at) : `${date.hour}:00`,
       };
     });
   }, [mode, span, now, t]);
@@ -183,21 +240,22 @@ export function QuotaTimeline({
   if (!hasAnyLane) return null;
 
   return (
-    <section className={styles.timeline}>
+    <section className={styles.timeline} data-span-start-ms={span.startMs} data-span-end-ms={span.endMs}>
       <header className={styles.head}>
         <div>
           <h2 className={styles.title}>
             {t('quota_management.windows_title', { defaultValue: 'Quota windows' })}
           </h2>
           <p className={styles.range}>
-            {formatDay(span.startMs)} – {formatDay(span.endMs - DAY_MS)}
+            {formatDay(span.startMs)} – {formatDay(span.endMs - 1)}
             {' · '}
             {mode === 'weekly'
               ? t('quota_management.windows_span_weekly', {
                   defaultValue: '{{count}} days',
                   count: span.days,
                 })
-              : t('quota_management.windows_span_session', { defaultValue: 'three days' })}
+              : t('quota_management.windows_span_session_days', { defaultValue: '{{count}} days', count: span.days })}
+            {' · America/Chicago'}
             {offset === 0 &&
               ` · ${t('quota_management.windows_current', { defaultValue: 'current' })}`}
           </p>
@@ -214,8 +272,8 @@ export function QuotaTimeline({
             </button>
             <button
               type="button"
-              onClick={() => setOffset(0)}
-              disabled={offset === 0}
+              onClick={() => { setOffset(0); setFitCurrent(true); }}
+              disabled={offset === 0 && fitCurrent}
               aria-label={todayLabel}
               title={offset === 0 ? undefined : todayLabel}
             >
@@ -239,6 +297,7 @@ export function QuotaTimeline({
                 onClick={() => {
                   setMode(value);
                   setOffset(0); // spans differ in size; an old offset means nothing
+                  setFitCurrent(true);
                   setZoomDays(TIMELINE_ZOOM_BOUNDS[value].default);
                 }}
               >
@@ -248,10 +307,23 @@ export function QuotaTimeline({
               </button>
             ))}
           </div>
+
+          {onRefreshAll && (
+            <button
+              type="button"
+              className={styles.refreshAction}
+              data-quota-windows-refresh="1"
+              onClick={onRefreshAll}
+              disabled={disableControls || refreshing}
+            >
+              <IconRefreshCw size={14} className={refreshing ? styles.spinning : undefined} />
+              {t('quota_management.windows_refresh', { defaultValue: 'Refresh' })}
+            </button>
+          )}
         </div>
       </header>
 
-      <div className={styles.chart}>
+      <div className={styles.chart} style={{ '--timeline-min-width': `${210 + cells.length * 44}px` } as CSSProperties}>
         {lanes.length === 0 ? (
           <div className={styles.empty} role="status">
             {t('quota_management.windows_empty_session', {
@@ -272,6 +344,7 @@ export function QuotaTimeline({
                     data-today={cell.isToday ? 1 : 0}
                     data-weekend={cell.isWeekend ? 1 : 0}
                     data-daystart={cell.isDayStart ? 1 : 0}
+                    style={{ flex: `0 0 ${cell.widthPercent}%` }}
                   >
                     <span className={styles.axisWeekday}>
                       {cell.isDayStart ? cell.weekday : ''}
@@ -307,19 +380,19 @@ export function QuotaTimeline({
             type="range"
             className={styles.zoomSlider}
             min={zoomBounds.min}
-            max={zoomBounds.max}
+            max={Math.max(zoomBounds.max, displayedZoom)}
             step={1}
-            value={zoomDays}
-            onChange={(event) => setZoomDays(Number(event.target.value))}
+            value={displayedZoom}
+            onChange={(event) => { setFitCurrent(false); setZoomDays(Number(event.target.value)); }}
             aria-label={t('quota_management.windows_zoom_slider', {
               defaultValue: 'Timeline zoom',
             })}
             aria-valuemin={zoomBounds.min}
-            aria-valuemax={zoomBounds.max}
-            aria-valuenow={zoomDays}
+            aria-valuemax={Math.max(zoomBounds.max, displayedZoom)}
+            aria-valuenow={displayedZoom}
             aria-valuetext={t('quota_management.windows_span_weekly', {
               defaultValue: '{{count}} days',
-              count: zoomDays,
+              count: displayedZoom,
             })}
           />
           <span className={styles.zoomHint}>
@@ -381,7 +454,7 @@ interface LaneProps {
   span: { startMs: number; endMs: number; days: number };
   now: number;
   mode: TimelineMode;
-  cells: { at: number; isWeekend: boolean; isDayStart: boolean }[];
+  cells: { at: number; isWeekend: boolean; isDayStart: boolean; widthPercent: number }[];
   nowPercent: number | null;
   resolvedTheme: ResolvedTheme;
 }
@@ -398,7 +471,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
     [lane, span, now]
   );
 
-  const stackedBars = lane.stackedBars ?? [];
+  const stackedBars = useMemo(() => lane.stackedBars ?? [], [lane.stackedBars]);
   const liveWindow = windows.find((window) => window.state === 'live') ?? null;
   const paceMarks = useMemo(() => {
     if (nowPercent === null || !liveWindow) return [];
@@ -413,9 +486,13 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
     return bars.map((bar, index) => ({
       ...bar,
       scheduled,
+      paceText: t('quota_management.windows_now_pace', {
+        defaultValue: '{{label}} on-pace: {{percent}}% remaining',
+        label: '', percent: scheduled,
+      }).trim().split(`${scheduled}%`),
       topPercent: ((index + 0.5) / bars.length) * 100,
     }));
-  }, [liveWindow, lane.displayName, lane.name, now, nowPercent, stackedBars]);
+  }, [liveWindow, lane.displayName, lane.name, now, nowPercent, stackedBars, t]);
 
   const colorSet = TYPE_COLORS[lane.provider] || TYPE_COLORS.unknown;
   const color: ThemeColors =
@@ -429,6 +506,21 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
   const timelineColorKey = lane.name.endsWith(':fable') ? 'fable' : lane.provider;
   const timelineColor = TIMELINE_ACCENTS[timelineColorKey as keyof typeof TIMELINE_ACCENTS];
   const accent = timelineColor?.[resolvedTheme] ?? color.text;
+  const nextResetMs =
+    lane.anchorMs !== null && lane.periodHours
+      ? lane.anchorMs +
+        Math.max(0, Math.floor((now - lane.anchorMs) / (lane.periodHours * 60 * 60_000)) + 1) *
+          lane.periodHours *
+          60 *
+          60_000
+      : null;
+  const nextResetLabel =
+    nextResetMs === null
+      ? null
+      : `${t('quota_management.windows_next_reset', { defaultValue: 'Resets' })} ${t(
+          `quota_management.weekday_${WEEKDAY_KEYS[weekdayIndex(nextResetMs)]}`,
+          { defaultValue: WEEKDAY_KEYS[weekdayIndex(nextResetMs)] }
+        )} ${formatDay(nextResetMs)} ${formatTime(nextResetMs)}`;
 
   // Sub-day windows are labelled in hours — rounding 5h to days gives "0d".
   const periodLabel =
@@ -458,6 +550,16 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
             <span className={styles.lanePeriod}>{periodLabel}</span>
           )}
         </div>
+        {nextResetLabel && (
+          <div className={styles.nextReset} data-next-reset-ms={nextResetMs}>
+            {nextResetLabel}
+          </div>
+        )}
+        {liveWindow && (
+          <div className={styles.nextReset} data-window-start-ms={liveWindow.startMs} data-window-end-ms={liveWindow.endMs}>
+            {formatDay(liveWindow.startMs)} {formatTime(liveWindow.startMs)} → {formatDay(liveWindow.endMs)} {formatTime(liveWindow.endMs)}
+          </div>
+        )}
         {lane.limits.length > 0 && (
           <div className={styles.laneLimits}>
             {lane.limits.map((limit) => (
@@ -476,6 +578,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               key={cell.at}
               data-weekend={cell.isWeekend ? 1 : 0}
               data-daystart={cell.isDayStart ? 1 : 0}
+              style={{ flex: `0 0 ${cell.widthPercent}%` }}
             />
           ))}
         </div>
@@ -495,7 +598,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               percent: mark.scheduled,
             })}
           >
-            {mark.scheduled}%
+            {mark.paceText[0]}<span>{mark.scheduled}%</span>{mark.paceText[1]}
           </span>
         ))}
 
@@ -515,11 +618,16 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                 ? formatTime(window.endMs)
                 : `${formatDay(window.endMs)} ${formatTime(window.endMs)}`;
 
-            if (stackedBars.length > 0 && window.state === 'live') {
+            if (stackedBars.length > 0 && window.state === 'live' && window.endMs === lane.anchorMs) {
               return (
                 <div
                   key={window.startMs}
                   className={styles.stackedWindow}
+                  data-window-state={window.state}
+                  data-clipped-start={window.startMs < span.startMs ? 1 : 0}
+                  data-clipped-end={window.endMs > span.endMs ? 1 : 0}
+                  data-window-start-ms={window.startMs}
+                  data-window-end-ms={window.endMs}
                   style={{ left: `${window.leftPercent}%`, width: `${window.widthPercent}%` }}
                   title={stackedBars
                     .map((bar) =>
@@ -547,7 +655,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                         {bar.remaining !== null && (
                           <span
                             className={styles.windowFill}
-                            style={{ width: `${100 - bar.remaining}%` }}
+                            style={{ width: `${visibleUsedPercent(window, bar.remaining, span.startMs, span.endMs)}%` }}
                           />
                         )}
                         <span
@@ -575,6 +683,11 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               <div
                 key={window.startMs}
                 className={`${styles.window} ${styles[`window${capitalize(window.state)}`]}`}
+                data-window-state={window.state}
+                  data-clipped-start={window.startMs < span.startMs ? 1 : 0}
+                  data-clipped-end={window.endMs > span.endMs ? 1 : 0}
+                data-window-start-ms={window.startMs}
+                data-window-end-ms={window.endMs}
                 style={{ left: `${window.leftPercent}%`, width: `${window.widthPercent}%` }}
                 title={`${lane.displayName}\n${formatDay(window.startMs)} ${formatTime(
                   window.startMs
@@ -587,7 +700,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                 {window.remaining !== null && (
                   <span
                     className={styles.windowFill}
-                    style={{ width: `${100 - window.remaining}%` }}
+                    style={{ width: `${visibleUsedPercent(window, window.remaining, span.startMs, span.endMs)}%` }}
                   />
                 )}
                 {showLabel && (
@@ -627,7 +740,14 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               title={title}
               role="img"
               aria-label={title.split('\n').join(', ')}
-            />
+            >
+              <span className={styles.resetCreditLabel} data-align-end={credit.leftPercent > 75 ? 1 : 0}>
+                {t('quota_management.windows_credit_expiry_short', {
+                  defaultValue: 'Credit expires {{date}}',
+                  date: formatDay(credit.expiresAtMs),
+                })}
+              </span>
+            </span>
           );
         })}
       </div>

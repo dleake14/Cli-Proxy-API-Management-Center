@@ -1,0 +1,47 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "quota window timeline no longer cuts off at the 19th",
+      "weekly span extends to capture the full next window of the provider that resets latest (Grok)",
+      "timeline goes through to the fall Wednesday (Sep 23, 2026)",
+      "session (5-hour) mode unchanged",
+      "deterministic tests for the extension",
+      "rollback pointer"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/ru.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "tests/quotaTimeline.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": ["proof/timeline-proof.html"]
+  },
+  "rollback": {
+    "command": "git restore --source=HEAD -- src/features/quota/quotaTimelineModel.ts src/features/quota/components/QuotaTimeline.tsx src/i18n/locales/en.json src/i18n/locales/ru.json src/i18n/locales/zh-CN.json src/i18n/locales/zh-TW.json tests/quotaTimeline.test.ts",
+    "baseline_ref": "git:HEAD (pre-edit main; no prior uncommitted changes to these files)"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [],
+    "required_text": [],
+    "forbidden_text": []
+  },
+  "proof": {
+    "browser": "react-dom/server renderToStaticMarkup",
+    "route": "QuotaTimeline weekly mode",
+    "viewport": "n/a (SSR markup)",
+    "console_errors": 0
+  }
+}

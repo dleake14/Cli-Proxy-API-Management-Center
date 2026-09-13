@@ -1,0 +1,27 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC quota clock refresh",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": ["validation.log", "diff.patch"]
+  },
+  "scope": {
+    "must_cover": [
+      "quota windows",
+      "current local day",
+      "Codex relative reset metadata",
+      "five minutes",
+      "Central-midnight",
+      "bun run verify",
+      "rollback"
+    ]
+  },
+  "floors": {
+    "min_words": 120,
+    "min_words_per_covered_term": 1
+  },
+  "forbidden_tokens": ["TODO", "Lorem ipsum", "OLLAMA_API_KEY=", "Bearer "]
+}

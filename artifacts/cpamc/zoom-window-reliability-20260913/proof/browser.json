@@ -1,0 +1,70 @@
+{
+  "results": [
+    {
+      "days": "3",
+      "windows": [
+        {
+          "start": "1788937200000",
+          "end": "1789542000000",
+          "clipped": "1",
+          "text": "Fable 85%All models 80%"
+        }
+      ],
+      "pace": [
+        "on-pace: 38% remaining",
+        "on-pace: 38% remaining"
+      ]
+    },
+    {
+      "days": "7",
+      "windows": [
+        {
+          "start": "1788937200000",
+          "end": "1789542000000",
+          "clipped": "1",
+          "text": "Fable 85%All models 80%"
+        }
+      ],
+      "pace": [
+        "on-pace: 38% remaining",
+        "on-pace: 38% remaining"
+      ]
+    },
+    {
+      "days": "15",
+      "windows": [
+        {
+          "start": "1788937200000",
+          "end": "1789542000000",
+          "clipped": "0",
+          "text": "Fable 85%All models 80%"
+        }
+      ],
+      "pace": [
+        "on-pace: 38% remaining",
+        "on-pace: 38% remaining"
+      ]
+    },
+    {
+      "days": "30",
+      "windows": [
+        {
+          "start": "1788937200000",
+          "end": "1789542000000",
+          "clipped": "0",
+          "text": "Fable 85%All models 80%"
+        }
+      ],
+      "pace": [
+        "on-pace: 38% remaining",
+        "on-pace: 38% remaining"
+      ]
+    }
+  ],
+  "errors": [],
+  "url": "http://127.0.0.1:5173/artifacts/cpamc/zoom-window-reliability-20260913/proof/fixture.html",
+  "viewport": {
+    "width": 1231,
+    "height": 1484
+  }
+}

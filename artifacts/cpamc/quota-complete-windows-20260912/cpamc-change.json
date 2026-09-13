@@ -1,0 +1,11 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {"must_cover": ["complete current quota windows for every tool", "Cursor monthly exception", "stable quota selection during zoom", "Central calendar and midnight rollover", "provider-backed reset dates", "rendered proof", "regression checks", "rollback"]},
+  "changed_files": ["src/features/quota/quotaTimelineModel.ts", "src/features/quota/components/QuotaTimeline.tsx", "src/features/quota/components/QuotaTimeline.module.scss", "src/features/quota/QuotaPage.tsx", "tests/quotaTimeline.test.ts", "tests/quotaTimelineRendering.test.ts", "docs/QUOTA-WINDOWS.md"],
+  "validation": {"command": "bun run verify", "exit_code": 0, "log_path": "validation.log"},
+  "evidence": {"diff_path": "diff.patch", "proof_paths": ["rendered.html", "desktop.png", "mobile.png"]},
+  "proof": {"browser": "local headless Chromium, deterministic fixtures", "route": "QuotaTimeline", "viewports": ["1440x1000", "390x844"], "console_error_count": 0, "results": "browser-results.json", "limitations": "Browser Control extension disconnected; authenticated operator tab not inspected"},
+  "rollback": {"command": "git apply -R artifacts/cpamc/quota-complete-windows-20260912/diff.patch", "baseline_ref": "existing dirty main worktree, saved in baseline/"},
+  "sources": ["src/features/quota/quotaTimelineModel.ts", "src/features/quota/QuotaPage.tsx"],
+  "ui_change": true
+}

@@ -1,0 +1,41 @@
+{
+  "checkedAt": "2026-09-13T15:08:21.408Z",
+  "windows": [
+    {
+      "window": "five_hour",
+      "used": 5,
+      "reset": "2026-09-13T16:00:00.730294+00:00"
+    },
+    {
+      "window": "seven_day",
+      "used": 19,
+      "reset": "2026-09-16T07:00:00.730314+00:00"
+    },
+    {
+      "window": "nimbus_quill",
+      "used": 0,
+      "reset": null
+    }
+  ],
+  "limits": [
+    {
+      "kind": "session",
+      "used": 5,
+      "reset": "2026-09-13T16:00:00.730294+00:00",
+      "active": false
+    },
+    {
+      "kind": "weekly_all",
+      "used": 19,
+      "reset": "2026-09-16T07:00:00.730314+00:00",
+      "active": true
+    },
+    {
+      "kind": "weekly_scoped",
+      "model": "Fable",
+      "used": 15,
+      "reset": "2026-09-16T07:00:00.730530+00:00",
+      "active": false
+    }
+  ]
+}

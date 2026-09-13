@@ -22,11 +22,11 @@ import type { QuotaProviderType } from './providers/types';
 
 export { DAY_MS, HOUR_MS };
 
-/** Weekly view spans a fortnight; the session view zooms to three days. */
+/** Weekly view looks fifteen days ahead; the session view zooms to three days. */
 export type TimelineMode = 'weekly' | 'session';
 
 export const TIMELINE_SPAN_DAYS: Record<TimelineMode, number> = {
-  weekly: 14,
+  weekly: 15,
   session: 3,
 };
 
@@ -38,19 +38,52 @@ export const TIMELINE_ZOOM_BOUNDS: Record<
   TimelineMode,
   { min: number; max: number; default: number }
 > = {
-  weekly: { ...TIMELINE_ZOOM_RANGE, default: 14 },
+  weekly: { ...TIMELINE_ZOOM_RANGE, default: 15 },
   session: { ...TIMELINE_ZOOM_RANGE, default: 3 },
 };
 
 export function clampTimelineZoomDays(mode: TimelineMode, visibleDays: number): number {
   const { min, max } = TIMELINE_ZOOM_BOUNDS[mode];
-  return Math.max(min, Math.min(max, Math.round(visibleDays)));
+  return Math.max(min, Math.min(max, Math.round(Number.isFinite(visibleDays) ? visibleDays : TIMELINE_ZOOM_BOUNDS[mode].default)));
 }
 
 /** The rolling window the session view projects, in hours. */
 const SESSION_PERIOD_HOURS = 5;
 /** Weekly timeline mode starts at a full 7-day span. */
 const WEEKLY_VIEW_MIN_HOURS = 7 * 24;
+const TIMELINE_TIME_ZONE = 'America/Chicago';
+
+function chicagoDateParts(ms: number): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIMELINE_TIME_ZONE,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date(ms));
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: read('year'), month: read('month'), day: read('day') };
+}
+
+/** Convert a Chicago calendar midnight to its UTC instant. */
+function chicagoMidnight(year: number, month: number, day: number): number {
+  const targetWallClock = Date.UTC(year, month - 1, day);
+  let guess = targetWallClock;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const actual = chicagoDateParts(guess);
+    const actualWallClock = Date.UTC(actual.year, actual.month - 1, actual.day);
+    const hour = Number(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: TIMELINE_TIME_ZONE,
+        hour: '2-digit',
+        hourCycle: 'h23',
+      })
+        .formatToParts(new Date(guess))
+        .find((part) => part.type === 'hour')?.value ?? 0
+    );
+    guess += targetWallClock - (actualWallClock + hour * HOUR_MS);
+  }
+  return guess;
+}
 
 /** A limit summarized in the lane's left column. */
 export interface TimelineLimit {
@@ -126,7 +159,7 @@ export function windowsIn(
   fromMs: number,
   toMs: number
 ): { startMs: number; endMs: number }[] {
-  if (!Number.isFinite(anchorMs) || !(periodMs > 0)) return [];
+  if (![anchorMs, periodMs, fromMs, toMs].every(Number.isFinite) || !(periodMs > 0)) return [];
   if (!(toMs > fromMs)) return [];
 
   // Guard against a pathological period (a bad payload) turning this into a
@@ -134,34 +167,74 @@ export function windowsIn(
   const maxWindows = Math.ceil((toMs - fromMs) / periodMs) + 2;
   if (maxWindows > 1000) return [];
 
-  let end = anchorMs + Math.ceil((fromMs - anchorMs) / periodMs) * periodMs;
+  const firstEnd = anchorMs + Math.ceil((fromMs - anchorMs) / periodMs) * periodMs;
   const out: { startMs: number; endMs: number }[] = [];
-  while (end - periodMs < toMs) {
+  for (let index = 0; index < maxWindows; index += 1) {
+    const end = firstEnd + index * periodMs;
+    if (end - periodMs >= toMs) break;
     out.push({ startMs: end - periodMs, endMs: end });
-    end += periodMs;
   }
   return out;
 }
 
-/** Start of the local day containing `ms`. */
+/** Start of the America/Chicago operator day containing `ms`. */
 export function startOfDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  const { year, month, day } = chicagoDateParts(ms);
+  return chicagoMidnight(year, month, day);
 }
 
-/** Start of the local week (Sunday) containing `ms`. */
+/** Move by Central calendar days, including 23/25-hour DST days. */
+export function addCalendarDays(ms: number, days: number): number {
+  const date = chicagoDateParts(ms);
+  return chicagoMidnight(date.year, date.month, date.day + days);
+}
+
+/** Fit the complete current windows. Cursor may extend beyond the left edge. */
+export function currentWindowSpan(
+  lanes: readonly TimelineLane[],
+  now: number,
+  minimumDays: number
+): { startMs: number; endMs: number; days: number } {
+  let first = now;
+  let last = now;
+  for (const lane of lanes) {
+    if (lane.anchorMs === null || !Number.isFinite(lane.anchorMs) ||
+        !lane.periodHours || !Number.isFinite(lane.periodHours) || lane.periodHours <= 0) continue;
+    const periodMs = lane.periodHours * HOUR_MS;
+    // At an exact boundary the next window has just opened.
+    const end = lane.anchorMs + (Math.floor((now - lane.anchorMs) / periodMs) + 1) * periodMs;
+    if (lane.provider !== 'cursor') first = Math.min(first, end - periodMs);
+    last = Math.max(last, end);
+  }
+  const startMs = startOfDay(first);
+  let endMs = addCalendarDays(startMs, minimumDays);
+  if (endMs <= last) endMs = addCalendarDays(last, 1);
+  const start = chicagoDateParts(startMs);
+  const end = chicagoDateParts(endMs);
+  const days = Math.round((Date.UTC(end.year, end.month - 1, end.day) -
+    Date.UTC(start.year, start.month - 1, start.day)) / DAY_MS);
+  return { startMs, endMs, days };
+}
+
+/** Start of the local week (Sunday) containing `ms`; retained for explicit navigation tests. */
 export function startOfWeek(ms: number): number {
-  const d = new Date(startOfDay(ms));
-  d.setDate(d.getDate() - d.getDay());
-  return d.getTime();
+  const { year, month, day } = chicagoDateParts(ms);
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
+  return chicagoMidnight(
+    calendar.getUTCFullYear(),
+    calendar.getUTCMonth() + 1,
+    calendar.getUTCDate()
+  );
 }
 
 /**
  * Visible span for a mode and offset.
  *
- * Weekly steps a week at a time from the containing Sunday; session steps a day
- * at a time from today. Uses date arithmetic rather than adding fixed
+ * Both views start at today so the operational surface spends its width on
+ * upcoming recovery events instead of the previous week. Weekly navigation
+ * still steps seven days; session navigation steps one day. Uses date
+ * arithmetic rather than adding fixed
  * millisecond counts so a DST transition inside the span doesn't shift every
  * subsequent day by an hour.
  */
@@ -171,14 +244,22 @@ export function timelineSpan(
   now: number
 ): { startMs: number; endMs: number; days: number } {
   const days = TIMELINE_SPAN_DAYS[mode];
-  const base = new Date(mode === 'weekly' ? startOfWeek(now) : startOfDay(now));
-  base.setDate(base.getDate() + offset * (mode === 'weekly' ? 7 : 1));
-  const startMs = base.getTime();
+  const baseParts = chicagoDateParts(now);
+  const baseCalendar = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day));
+  baseCalendar.setUTCDate(baseCalendar.getUTCDate() + offset * (mode === 'weekly' ? 7 : 1));
+  const startMs = chicagoMidnight(
+    baseCalendar.getUTCFullYear(),
+    baseCalendar.getUTCMonth() + 1,
+    baseCalendar.getUTCDate()
+  );
+  baseCalendar.setUTCDate(baseCalendar.getUTCDate() + days);
+  const endMs = chicagoMidnight(
+    baseCalendar.getUTCFullYear(),
+    baseCalendar.getUTCMonth() + 1,
+    baseCalendar.getUTCDate()
+  );
 
-  const end = new Date(startMs);
-  end.setDate(end.getDate() + days);
-
-  return { startMs, endMs: end.getTime(), days };
+  return { startMs, endMs, days };
 }
 
 /**
@@ -192,10 +273,16 @@ export function timelineSpanZoomed(
   visibleDays: number
 ): { startMs: number; endMs: number; days: number } {
   const days = clampTimelineZoomDays(mode, visibleDays);
-  const base = new Date(mode === 'weekly' ? startOfWeek(now) : startOfDay(now));
-  base.setDate(base.getDate() + offset * (mode === 'weekly' ? 7 : 1));
-  const startMs = base.getTime();
-  return { startMs, endMs: startMs + days * DAY_MS, days };
+  const base = timelineSpan(mode, offset, now);
+  if (days === base.days) return base;
+  const baseParts = chicagoDateParts(base.startMs);
+  const endCalendar = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day + days));
+  const endMs = chicagoMidnight(
+    endCalendar.getUTCFullYear(),
+    endCalendar.getUTCMonth() + 1,
+    endCalendar.getUTCDate()
+  );
+  return { startMs: base.startMs, endMs, days };
 }
 
 /**
@@ -347,7 +434,8 @@ export function pickLaneWindow<
  * windows fall outside the visible span still gets a row, and says so.
  */
 export function laneHasWindow(lane: TimelineLane): boolean {
-  return lane.anchorMs !== null;
+  return lane.anchorMs !== null && Number.isFinite(lane.anchorMs) &&
+    lane.periodHours !== null && Number.isFinite(lane.periodHours) && lane.periodHours > 0;
 }
 
 /* ------------------------------------------------------------------ lanes */
@@ -437,7 +525,8 @@ export function scheduledRemainingAt(
   windowStartMs: number,
   windowEndMs: number
 ): number | null {
-  if (nowMs < windowStartMs || nowMs >= windowEndMs) return null;
+  if (![nowMs, windowStartMs, windowEndMs].every(Number.isFinite) ||
+      nowMs < windowStartMs || nowMs >= windowEndMs) return null;
   const duration = windowEndMs - windowStartMs;
   if (!(duration > 0)) return null;
   return clampPercent(Math.round((100 * (windowEndMs - nowMs)) / duration));
@@ -702,6 +791,7 @@ const finishStackedLane = (
  * and Cursor Models sit on top because they are the tighter limits in practice.
  */
 export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
+  if (input.quota?.status !== 'success') return [buildTimelineLane(input)];
   if ((input.maxPeriodHours ?? Infinity) < WEEKLY_VIEW_MIN_HOURS) {
     return [buildTimelineLane(input)];
   }
@@ -712,6 +802,18 @@ export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
     const fable = windows.find((window) => window.id === 'seven-day-fable');
     const allModels = windows.find((window) => window.id === 'seven-day');
     if (!fable && !allModels) return [buildTimelineLane(input)];
+
+    // Independent pools may reset at different instants. Never borrow the
+    // Fable clock for the account-wide allowance.
+    if (fable && allModels && (fable.resetAtMs !== allModels.resetAtMs ||
+        fable.periodHours !== allModels.periodHours)) {
+      return [fable, allModels].map((window) => buildTimelineLane({
+        ...input,
+        name: `${input.name}:${window.id}`,
+        displayName: `${input.displayName} · ${window.label ?? window.id}`,
+        quota: claudeWindowQuota(quota, [window]),
+      }));
+    }
 
     const stackedBars: TimelineStackedBar[] = [];
     if (fable) {
@@ -809,4 +911,32 @@ export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
   }
 
   return [buildTimelineLane(input)];
+}
+
+/** Zoom around today's position without changing any provider's clock. */
+export function zoomCurrentSpan(
+  span: { startMs: number; endMs: number; days: number },
+  now: number,
+  mode: TimelineMode,
+  visibleDays: number
+): { startMs: number; endMs: number; days: number } {
+  const days = clampTimelineZoomDays(mode, visibleDays);
+  const fraction = Math.max(0, Math.min(1, (now - span.startMs) / (span.endMs - span.startMs)));
+  const startMs = startOfDay(now - fraction * days * DAY_MS);
+  return { startMs, endMs: addCalendarDays(startMs, days), days };
+}
+
+/** Used fill ends at its full-window position, even when either edge is cropped. */
+export function visibleUsedPercent(
+  window: Pick<TimelineWindow, 'startMs' | 'endMs'>,
+  remaining: number,
+  spanStartMs: number,
+  spanEndMs: number
+): number {
+  if (![window.startMs, window.endMs, remaining, spanStartMs, spanEndMs].every(Number.isFinite)) return 0;
+  const left = Math.max(window.startMs, spanStartMs);
+  const right = Math.min(window.endMs, spanEndMs);
+  if (right <= left) return 0;
+  const usedEnd = window.startMs + (window.endMs - window.startMs) * (1 - clampPercent(remaining) / 100);
+  return clampPercent(100 * (usedEnd - left) / (right - left));
 }

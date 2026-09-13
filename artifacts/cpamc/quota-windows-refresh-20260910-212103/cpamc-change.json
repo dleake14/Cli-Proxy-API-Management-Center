@@ -1,0 +1,57 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "add a refresh button inside the quota windows (timeline) section",
+      "place it in the timeline header control row, right-aligned beside the zoom/mode controls like the big refresh-all button in the page header",
+      "reuse the page refresh-all handler so the windows section and the credential cards refresh together",
+      "button carries the same icon, pill styling, spinning state and disabled-while-refreshing behavior as refresh_all_credentials",
+      "localized label present in en, zh-CN, zh-TW and ru locale files",
+      "deterministic rendering test covering label, disabled state and click handler",
+      "rollback pointer"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "src/features/quota/components/QuotaTimeline.module.scss",
+    "src/features/quota/QuotaPage.tsx",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "src/i18n/locales/ru.json",
+    "tests/quotaTimelineRendering.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": ["proof/timeline-refresh-proof.html"]
+  },
+  "rollback": {
+    "command": "git restore --source=HEAD -- src/features/quota/components/QuotaTimeline.tsx src/features/quota/components/QuotaTimeline.module.scss src/features/quota/QuotaPage.tsx src/i18n/locales/en.json src/i18n/locales/zh-CN.json src/i18n/locales/zh-TW.json src/i18n/locales/ru.json tests/quotaTimelineRendering.test.ts",
+    "baseline_ref": "git:100b82c (pre-edit main; no prior uncommitted changes to these files)"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [],
+    "required_text": [
+      { "path": "src/features/quota/components/QuotaTimeline.tsx", "contains": "onRefreshAll" },
+      { "path": "src/i18n/locales/en.json", "contains": "windows_refresh" },
+      { "path": "src/i18n/locales/zh-CN.json", "contains": "windows_refresh" },
+      { "path": "src/i18n/locales/zh-TW.json", "contains": "windows_refresh" },
+      { "path": "src/i18n/locales/ru.json", "contains": "windows_refresh" }
+    ],
+    "forbidden_text": [
+      { "path": "src/features/quota/components/QuotaTimeline.tsx", "contains": "Authorization: Bearer" }
+    ]
+  },
+  "proof": {
+    "browser": "react-dom/server renderToStaticMarkup",
+    "route": "QuotaPage -> QuotaTimeline header controls",
+    "viewport": "n/a (SSR markup)",
+    "console_errors": 0
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "automatic initial and five-minute quota refresh",
+      "catch up after sleep and reconnect",
+      "busy batches do not consume refresh deadline",
+      "retain readings while background refresh runs",
+      "tests and rollback"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/QuotaPage.tsx",
+    "src/features/quota/quotaRefreshClock.ts",
+    "src/features/quota/hooks/useQuotaBatchLoader.ts",
+    "tests/quotaRefreshClock.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "proof/rendered.html"
+    ]
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/automatic-refresh-20260913/diff.patch",
+    "baseline_ref": "100b82ce687387d4a31155b9fb95c1887d5514fc plus baseline snapshots"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [],
+    "required_text": [],
+    "forbidden_text": []
+  },
+  "sources": [
+    "baseline-status.txt",
+    "validation.log"
+  ],
+  "verification": {
+    "focused_tests": 6,
+    "suite_tests": 497,
+    "suite_failures": 0,
+    "lint_exit_code": 0,
+    "build_exit_code": 0
+  },
+  "proof": {
+    "browser": "Chromium via Browser Control 0.3.2",
+    "route": "QuotaPage isolated fixture with simulated provider responses",
+    "console_error_count": 0,
+    "checks": [
+      "initial automatic fetch",
+      "five-minute due timer",
+      "retain live window during fetch",
+      "focus catch-up after simulated sleep"
+    ],
+    "limitations": [
+      "simulated clock and provider responses; not a real five-minute live-provider soak"
+    ],
+    "tool_warning": "Prior session-owned page had closed; Browser Control created a fresh page. All assertions ran on the fresh page."
+  }
+}

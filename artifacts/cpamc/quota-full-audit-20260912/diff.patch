@@ -1,0 +1,1084 @@
+diff --git a/package.json b/package.json
+index 69226f6..ce7a833 100644
+--- a/package.json
++++ b/package.json
+@@ -12,7 +12,8 @@
+     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
+     "verify": "bun run test && bun run lint && bun run build",
+     "format": "prettier --write \"src/**/*.{ts,tsx,css,scss}\"",
+-    "type-check": "tsc --noEmit"
++    "type-check": "tsc --noEmit",
++    "audit:quota": "bun tools/audit-quota-windows.ts"
+   },
+   "dependencies": {
+     "@codemirror/lang-yaml": "^6.1.3",
+diff --git a/src/features/quota/QuotaPage.tsx b/src/features/quota/QuotaPage.tsx
+index 5e19aaf..4f9bc5e 100644
+--- a/src/features/quota/QuotaPage.tsx
++++ b/src/features/quota/QuotaPage.tsx
+@@ -43,6 +43,7 @@ import {
+   type QuotaFileEntry,
+ } from './logic';
+ import { nextRecoveryMs } from './resetSchedule';
++import { quotaRefreshBucket } from './quotaRefreshClock';
+ import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers';
+ import type { QuotaProviderType } from './providers/types';
+ import { useQuotaActions } from './hooks/useQuotaActions';
+@@ -132,9 +133,10 @@ export function QuotaPage() {
+ 
+   /* ---------- 归类 / 过滤 / 排序 / 分页 ---------- */
+ 
+-  // 只在「最快恢复优先」下订阅分钟时钟。默认序下不门控的话，pageItems 每分钟
+-  // 换一次身份，会反复空转下面那个「刷新全部」的 loading 下降沿 effect。
+-  const tick = useNow(sortMode !== 'default');
++  // Keep one live minute clock even in default sort mode. Codex and other
++  // providers return relative reset offsets; a long-lived tab must re-fetch
++  // them instead of preserving the weekday from the original page load.
++  const tick = useNow();
+   const sortNow = sortMode === 'default' ? 0 : tick;
+ 
+   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
+@@ -222,6 +224,19 @@ export function QuotaPage() {
+   const { batchLoading, loadQuota } = useQuotaBatchLoader();
+   const { refreshQuota } = useQuotaActions(disableControls);
+ 
++  const autoRefreshBucketRef = useRef<number | null>(null);
++  const currentRefreshBucket = quotaRefreshBucket(tick);
++
++  // Load the visible quota rows immediately and refresh them every five
++  // minutes. This also crosses midnight without a reload, so the timeline's
++  // local-day axis and provider reset anchors cannot drift onto different days.
++  useEffect(() => {
++    if (loading || disableControls || pageItems.length === 0) return;
++    if (autoRefreshBucketRef.current === currentRefreshBucket) return;
++    autoRefreshBucketRef.current = currentRefreshBucket;
++    void loadQuota(pageItems);
++  }, [currentRefreshBucket, disableControls, loadQuota, loading, pageItems]);
++
+   const pendingRefreshRef = useRef(false);
+   const prevLoadingRef = useRef(loading);
+ 
+@@ -383,6 +398,9 @@ export function QuotaPage() {
+           quotaFor={getQuota}
+           displayNameFor={displayNameFor}
+           resolvedTheme={resolvedTheme}
++          refreshing={loading || batchLoading}
++          disableControls={disableControls}
++          onRefreshAll={handleRefreshAll}
+         />
+       </section>
+     </div>
+diff --git a/src/features/quota/components/QuotaTimeline.module.scss b/src/features/quota/components/QuotaTimeline.module.scss
+index 6bc6967..320178d 100644
+--- a/src/features/quota/components/QuotaTimeline.module.scss
++++ b/src/features/quota/components/QuotaTimeline.module.scss
+@@ -78,6 +78,60 @@ $lane-width: 210px;
+   }
+ }
+ 
++// Same ink pill as the page header's refresh_all_credentials, so the windows
++// section repeats the page-level action in the page-level voice.
++.refreshAction {
++  display: inline-flex;
++  align-items: center;
++  gap: 7px;
++  border: 0;
++  cursor: pointer;
++  background: var(--text-primary);
++  color: var(--bg-secondary);
++  border-radius: $radius-full;
++  padding: 8px 16px;
++  font: inherit;
++  font-size: 13px;
++  font-weight: 600;
++  line-height: 1;
++  transition:
++    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
++    background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
++    box-shadow var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
++
++  &:disabled {
++    cursor: not-allowed;
++    opacity: 0.55;
++  }
++
++  &:active:not(:disabled) {
++    transform: translateY(0) scale(0.97);
++  }
++
++  &:focus-visible {
++    outline: 2px solid var(--primary-color);
++    outline-offset: 2px;
++  }
++}
++
++.spinning {
++  animation: timeline-refresh-spin 0.8s linear infinite;
++}
++
++@keyframes timeline-refresh-spin {
++  to {
++    transform: rotate(360deg);
++  }
++}
++
++@media (hover: hover) and (pointer: fine) {
++  .refreshAction:hover:not(:disabled) {
++    transform: translateY(-1px);
++    background: color-mix(in srgb, var(--text-primary) 86%, var(--bg-secondary));
++    box-shadow: 0 12px 26px color-mix(in srgb, var(--text-primary) 22%, transparent);
++  }
++}
++
+ .chart {
+   border: 1px solid var(--border-color);
+   border-radius: $radius-lg;
+@@ -210,6 +264,14 @@ $lane-width: 210px;
+   gap: 4px;
+ }
+ 
++.nextReset {
++  font-size: 10.5px;
++  font-weight: 650;
++  color: var(--text-secondary);
++  font-variant-numeric: tabular-nums;
++  white-space: nowrap;
++}
++
+ .laneLimit {
+   padding: 1px 6px;
+   border-radius: $radius-sm;
+@@ -392,6 +454,22 @@ $lane-width: 210px;
+   }
+ }
+ 
++.resetCreditLabel {
++  position: absolute;
++  left: 6px;
++  top: -2px;
++  padding: 2px 6px;
++  border: 1px solid color-mix(in srgb, var(--amber-color) 55%, transparent);
++  border-radius: 999px;
++  background: var(--bg-primary);
++  color: var(--text-secondary);
++  font-size: 9px;
++  font-weight: 650;
++  line-height: 1.2;
++  white-space: nowrap;
++  font-variant-numeric: tabular-nums;
++}
++
+ .laneIdle {
+   position: relative;
+   z-index: 2;
+diff --git a/src/features/quota/components/QuotaTimeline.tsx b/src/features/quota/components/QuotaTimeline.tsx
+index dca8ba9..ccc98b0 100644
+--- a/src/features/quota/components/QuotaTimeline.tsx
++++ b/src/features/quota/components/QuotaTimeline.tsx
+@@ -15,6 +15,7 @@
+ import { useMemo, useState } from 'react';
+ import type { CSSProperties } from 'react';
+ import { useTranslation } from 'react-i18next';
++import { IconRefreshCw } from '@/components/ui/icons';
+ import { formatRelativeInstant, TYPE_COLORS } from '@/utils/quota';
+ import { useNow } from '@/hooks/useNow';
+ import type { ResolvedTheme, ThemeColors } from '@/types';
+@@ -35,6 +36,16 @@ import type { QuotaCardState } from '../providers';
+ import styles from './QuotaTimeline.module.scss';
+ 
+ const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
++const TIMELINE_TIME_ZONE = 'America/Chicago';
++const EN_WEEKDAY_INDEX: Record<string, number> = {
++  Sun: 0,
++  Mon: 1,
++  Tue: 2,
++  Wed: 3,
++  Thu: 4,
++  Fri: 5,
++  Sat: 6,
++};
+ 
+ const TIMELINE_ACCENTS = {
+   claude: { light: '#c05621', dark: '#e8a882' },
+@@ -45,16 +56,35 @@ const TIMELINE_ACCENTS = {
+   codex: { light: '#3538d4', dark: '#a5b4fc' },
+ } as const;
+ 
+-const pad = (value: number) => String(value).padStart(2, '0');
++const centralParts = (ms: number) => {
++  const parts = new Intl.DateTimeFormat('en-US', {
++    timeZone: TIMELINE_TIME_ZONE,
++    weekday: 'short',
++    month: '2-digit',
++    day: '2-digit',
++    hour: '2-digit',
++    minute: '2-digit',
++    hourCycle: 'h23',
++  }).formatToParts(new Date(ms));
++  const read = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
++  return {
++    month: read('month'),
++    day: read('day'),
++    hour: read('hour'),
++    minute: read('minute'),
++    weekday: read('weekday'),
++  };
++};
+ 
+ const formatDay = (ms: number) => {
+-  const d = new Date(ms);
+-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
++  const part = centralParts(ms);
++  return `${part.month}/${part.day}`;
+ };
+ const formatTime = (ms: number) => {
+-  const d = new Date(ms);
+-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
++  const part = centralParts(ms);
++  return `${part.hour}:${part.minute}`;
+ };
++const weekdayIndex = (ms: number) => EN_WEEKDAY_INDEX[centralParts(ms).weekday] ?? 0;
+ 
+ export interface QuotaTimelineProps {
+   entries: QuotaFileEntry[];
+@@ -74,6 +104,14 @@ export interface QuotaTimelineProps {
+   initialOffset?: number;
+   /** Injectable initial zoom day-count for tests/screenshots. */
+   initialZoomDays?: number;
++  /**
++   * Refresh-all wiring, owned by the page. The windows panel shows the same
++   * credentials as the cards above, so it offers the same refresh action rather
++   * than a second, divergent fetch path.
++   */
++  refreshing?: boolean;
++  disableControls?: boolean;
++  onRefreshAll?: () => void;
+ }
+ 
+ export function QuotaTimeline({
+@@ -85,6 +123,9 @@ export function QuotaTimeline({
+   initialMode = 'weekly',
+   initialOffset = 0,
+   initialZoomDays,
++  refreshing = false,
++  disableControls = false,
++  onRefreshAll,
+ }: QuotaTimelineProps) {
+   const { t } = useTranslation();
+   const [mode, setMode] = useState<TimelineMode>(initialMode);
+@@ -155,21 +196,22 @@ export function QuotaTimeline({
+     const zoomed = mode === 'session';
+     const count = zoomed ? span.days * 4 : span.days;
+     const cellMs = (span.endMs - span.startMs) / count;
+-    const todayStart = new Date(now).setHours(0, 0, 0, 0);
++    const todayKey = formatDay(now);
+ 
+     return Array.from({ length: count }, (_, index) => {
+       const at = span.startMs + index * cellMs;
+-      const date = new Date(at);
+-      const isDayStart = !zoomed || date.getHours() === 0;
++      const date = centralParts(at);
++      const isDayStart = !zoomed || date.hour === '00';
++      const dayIndex = weekdayIndex(at);
+       return {
+         at,
+         isDayStart,
+-        isToday: new Date(at).setHours(0, 0, 0, 0) === todayStart,
+-        isWeekend: date.getDay() === 0 || date.getDay() === 6,
+-        weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[date.getDay()]}`, {
+-          defaultValue: WEEKDAY_KEYS[date.getDay()],
++        isToday: formatDay(at) === todayKey,
++        isWeekend: dayIndex === 0 || dayIndex === 6,
++        weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[dayIndex]}`, {
++          defaultValue: WEEKDAY_KEYS[dayIndex],
+         }),
+-        label: isDayStart ? formatDay(at) : `${pad(date.getHours())}:00`,
++        label: isDayStart ? formatDay(at) : `${date.hour}:00`,
+       };
+     });
+   }, [mode, span, now, t]);
+@@ -248,6 +290,19 @@ export function QuotaTimeline({
+               </button>
+             ))}
+           </div>
++
++          {onRefreshAll && (
++            <button
++              type="button"
++              className={styles.refreshAction}
++              data-quota-windows-refresh="1"
++              onClick={onRefreshAll}
++              disabled={disableControls || refreshing}
++            >
++              <IconRefreshCw size={14} className={refreshing ? styles.spinning : undefined} />
++              {t('quota_management.windows_refresh', { defaultValue: 'Refresh' })}
++            </button>
++          )}
+         </div>
+       </header>
+ 
+@@ -398,7 +453,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
+     [lane, span, now]
+   );
+ 
+-  const stackedBars = lane.stackedBars ?? [];
++  const stackedBars = useMemo(() => lane.stackedBars ?? [], [lane.stackedBars]);
+   const liveWindow = windows.find((window) => window.state === 'live') ?? null;
+   const paceMarks = useMemo(() => {
+     if (nowPercent === null || !liveWindow) return [];
+@@ -429,6 +484,21 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
+   const timelineColorKey = lane.name.endsWith(':fable') ? 'fable' : lane.provider;
+   const timelineColor = TIMELINE_ACCENTS[timelineColorKey as keyof typeof TIMELINE_ACCENTS];
+   const accent = timelineColor?.[resolvedTheme] ?? color.text;
++  const nextResetMs =
++    lane.anchorMs !== null && lane.periodHours
++      ? lane.anchorMs +
++        Math.max(0, Math.ceil((now - lane.anchorMs) / (lane.periodHours * 60 * 60_000))) *
++          lane.periodHours *
++          60 *
++          60_000
++      : null;
++  const nextResetLabel =
++    nextResetMs === null
++      ? null
++      : `${t('quota_management.windows_next_reset', { defaultValue: 'Resets' })} ${t(
++          `quota_management.weekday_${WEEKDAY_KEYS[weekdayIndex(nextResetMs)]}`,
++          { defaultValue: WEEKDAY_KEYS[weekdayIndex(nextResetMs)] }
++        )} ${formatDay(nextResetMs)} ${formatTime(nextResetMs)}`;
+ 
+   // Sub-day windows are labelled in hours — rounding 5h to days gives "0d".
+   const periodLabel =
+@@ -458,6 +528,11 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
+             <span className={styles.lanePeriod}>{periodLabel}</span>
+           )}
+         </div>
++        {nextResetLabel && (
++          <div className={styles.nextReset} data-next-reset-ms={nextResetMs}>
++            {nextResetLabel}
++          </div>
++        )}
+         {lane.limits.length > 0 && (
+           <div className={styles.laneLimits}>
+             {lane.limits.map((limit) => (
+@@ -627,7 +702,14 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
+               title={title}
+               role="img"
+               aria-label={title.split('\n').join(', ')}
+-            />
++            >
++              <span className={styles.resetCreditLabel}>
++                {t('quota_management.windows_credit_expiry_short', {
++                  defaultValue: 'Credit expires {{date}}',
++                  date: formatDay(credit.expiresAtMs),
++                })}
++              </span>
++            </span>
+           );
+         })}
+       </div>
+diff --git a/src/features/quota/quotaTimelineModel.ts b/src/features/quota/quotaTimelineModel.ts
+index 8c21f79..c82dd0e 100644
+--- a/src/features/quota/quotaTimelineModel.ts
++++ b/src/features/quota/quotaTimelineModel.ts
+@@ -22,11 +22,11 @@ import type { QuotaProviderType } from './providers/types';
+ 
+ export { DAY_MS, HOUR_MS };
+ 
+-/** Weekly view spans a fortnight; the session view zooms to three days. */
++/** Weekly view looks fifteen days ahead; the session view zooms to three days. */
+ export type TimelineMode = 'weekly' | 'session';
+ 
+ export const TIMELINE_SPAN_DAYS: Record<TimelineMode, number> = {
+-  weekly: 14,
++  weekly: 15,
+   session: 3,
+ };
+ 
+@@ -38,7 +38,7 @@ export const TIMELINE_ZOOM_BOUNDS: Record<
+   TimelineMode,
+   { min: number; max: number; default: number }
+ > = {
+-  weekly: { ...TIMELINE_ZOOM_RANGE, default: 14 },
++  weekly: { ...TIMELINE_ZOOM_RANGE, default: 15 },
+   session: { ...TIMELINE_ZOOM_RANGE, default: 3 },
+ };
+ 
+@@ -51,6 +51,39 @@ export function clampTimelineZoomDays(mode: TimelineMode, visibleDays: number):
+ const SESSION_PERIOD_HOURS = 5;
+ /** Weekly timeline mode starts at a full 7-day span. */
+ const WEEKLY_VIEW_MIN_HOURS = 7 * 24;
++const TIMELINE_TIME_ZONE = 'America/Chicago';
++
++function chicagoDateParts(ms: number): { year: number; month: number; day: number } {
++  const parts = new Intl.DateTimeFormat('en-US', {
++    timeZone: TIMELINE_TIME_ZONE,
++    year: 'numeric',
++    month: 'numeric',
++    day: 'numeric',
++  }).formatToParts(new Date(ms));
++  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value);
++  return { year: read('year'), month: read('month'), day: read('day') };
++}
++
++/** Convert a Chicago calendar midnight to its UTC instant. */
++function chicagoMidnight(year: number, month: number, day: number): number {
++  const targetWallClock = Date.UTC(year, month - 1, day);
++  let guess = targetWallClock;
++  for (let attempt = 0; attempt < 2; attempt += 1) {
++    const actual = chicagoDateParts(guess);
++    const actualWallClock = Date.UTC(actual.year, actual.month - 1, actual.day);
++    const hour = Number(
++      new Intl.DateTimeFormat('en-US', {
++        timeZone: TIMELINE_TIME_ZONE,
++        hour: '2-digit',
++        hourCycle: 'h23',
++      })
++        .formatToParts(new Date(guess))
++        .find((part) => part.type === 'hour')?.value ?? 0
++    );
++    guess += targetWallClock - (actualWallClock + hour * HOUR_MS);
++  }
++  return guess;
++}
+ 
+ /** A limit summarized in the lane's left column. */
+ export interface TimelineLimit {
+@@ -143,25 +176,31 @@ export function windowsIn(
+   return out;
+ }
+ 
+-/** Start of the local day containing `ms`. */
++/** Start of the America/Chicago operator day containing `ms`. */
+ export function startOfDay(ms: number): number {
+-  const d = new Date(ms);
+-  d.setHours(0, 0, 0, 0);
+-  return d.getTime();
++  const { year, month, day } = chicagoDateParts(ms);
++  return chicagoMidnight(year, month, day);
+ }
+ 
+-/** Start of the local week (Sunday) containing `ms`. */
++/** Start of the local week (Sunday) containing `ms`; retained for explicit navigation tests. */
+ export function startOfWeek(ms: number): number {
+-  const d = new Date(startOfDay(ms));
+-  d.setDate(d.getDate() - d.getDay());
+-  return d.getTime();
++  const { year, month, day } = chicagoDateParts(ms);
++  const calendar = new Date(Date.UTC(year, month - 1, day));
++  calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
++  return chicagoMidnight(
++    calendar.getUTCFullYear(),
++    calendar.getUTCMonth() + 1,
++    calendar.getUTCDate()
++  );
+ }
+ 
+ /**
+  * Visible span for a mode and offset.
+  *
+- * Weekly steps a week at a time from the containing Sunday; session steps a day
+- * at a time from today. Uses date arithmetic rather than adding fixed
++ * Both views start at today so the operational surface spends its width on
++ * upcoming recovery events instead of the previous week. Weekly navigation
++ * still steps seven days; session navigation steps one day. Uses date
++ * arithmetic rather than adding fixed
+  * millisecond counts so a DST transition inside the span doesn't shift every
+  * subsequent day by an hour.
+  */
+@@ -171,14 +210,22 @@ export function timelineSpan(
+   now: number
+ ): { startMs: number; endMs: number; days: number } {
+   const days = TIMELINE_SPAN_DAYS[mode];
+-  const base = new Date(mode === 'weekly' ? startOfWeek(now) : startOfDay(now));
+-  base.setDate(base.getDate() + offset * (mode === 'weekly' ? 7 : 1));
+-  const startMs = base.getTime();
+-
+-  const end = new Date(startMs);
+-  end.setDate(end.getDate() + days);
++  const baseParts = chicagoDateParts(now);
++  const baseCalendar = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day));
++  baseCalendar.setUTCDate(baseCalendar.getUTCDate() + offset * (mode === 'weekly' ? 7 : 1));
++  const startMs = chicagoMidnight(
++    baseCalendar.getUTCFullYear(),
++    baseCalendar.getUTCMonth() + 1,
++    baseCalendar.getUTCDate()
++  );
++  baseCalendar.setUTCDate(baseCalendar.getUTCDate() + days);
++  const endMs = chicagoMidnight(
++    baseCalendar.getUTCFullYear(),
++    baseCalendar.getUTCMonth() + 1,
++    baseCalendar.getUTCDate()
++  );
+ 
+-  return { startMs, endMs: end.getTime(), days };
++  return { startMs, endMs, days };
+ }
+ 
+ /**
+@@ -192,10 +239,16 @@ export function timelineSpanZoomed(
+   visibleDays: number
+ ): { startMs: number; endMs: number; days: number } {
+   const days = clampTimelineZoomDays(mode, visibleDays);
+-  const base = new Date(mode === 'weekly' ? startOfWeek(now) : startOfDay(now));
+-  base.setDate(base.getDate() + offset * (mode === 'weekly' ? 7 : 1));
+-  const startMs = base.getTime();
+-  return { startMs, endMs: startMs + days * DAY_MS, days };
++  const base = timelineSpan(mode, offset, now);
++  if (days === base.days) return base;
++  const baseParts = chicagoDateParts(base.startMs);
++  const endCalendar = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day + days));
++  const endMs = chicagoMidnight(
++    endCalendar.getUTCFullYear(),
++    endCalendar.getUTCMonth() + 1,
++    endCalendar.getUTCDate()
++  );
++  return { startMs: base.startMs, endMs, days };
+ }
+ 
+ /**
+diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
+index d376ff2..6e4f1ec 100644
+--- a/src/i18n/locales/en.json
++++ b/src/i18n/locales/en.json
+@@ -1195,6 +1195,7 @@
+     "windows_idle": "no window counting down",
+     "windows_empty_session": "No credentials on this page report a 5-hour quota window.",
+     "windows_now_pace": "{{label}} on-pace: {{percent}}% remaining",
++    "windows_refresh": "Refresh",
+     "windows_legend_current": "current window",
+     "windows_legend_upcoming": "upcoming",
+     "windows_legend_elapsed": "elapsed",
+@@ -1203,6 +1204,8 @@
+     "windows_reset_credit": "Manual reset",
+     "windows_credit_granted": "Granted",
+     "windows_credit_expires": "Expires",
++    "windows_next_reset": "Resets",
++    "windows_credit_expiry_short": "Credit expires {{date}}",
+     "windows_note_weekly": "Each bar is one full quota window, drawn from when it opened to when it resets. Lanes ending together compete for the same days.",
+     "windows_note_session": "Each bar is one 5-hour window. Only credentials with a window counting down can be projected; the rest stay empty rather than invented.",
+     "weekday_sun": "Sun",
+diff --git a/src/i18n/locales/ru.json b/src/i18n/locales/ru.json
+index d4ef0fc..538a284 100644
+--- a/src/i18n/locales/ru.json
++++ b/src/i18n/locales/ru.json
+@@ -1182,6 +1182,7 @@
+     "windows_idle": "нет активного окна",
+     "windows_empty_session": "Ни одни учётные данные на этой странице не предоставляют 5-часовое окно квоты.",
+     "windows_now_pace": "{{label}} по графику: {{percent}}% осталось",
++    "windows_refresh": "Обновить",
+     "windows_legend_current": "текущее окно",
+     "windows_legend_upcoming": "предстоящее",
+     "windows_legend_elapsed": "прошедшее",
+@@ -1190,6 +1191,8 @@
+     "windows_reset_credit": "Ручной сброс",
+     "windows_credit_granted": "Предоставлен",
+     "windows_credit_expires": "Истекает",
++    "windows_next_reset": "Сброс",
++    "windows_credit_expiry_short": "Кредит истекает {{date}}",
+     "windows_note_weekly": "Каждая полоса — одно окно квоты, от открытия до сброса. Окна, заканчивающиеся вместе, конкурируют за одни и те же дни.",
+     "windows_note_session": "Каждая полоса — одно 5-часовое окно. Показаны только учётные данные с активным окном; остальные остаются пустыми.",
+     "weekday_sun": "Вс",
+diff --git a/src/i18n/locales/zh-CN.json b/src/i18n/locales/zh-CN.json
+index 14a2b29..054bbf7 100644
+--- a/src/i18n/locales/zh-CN.json
++++ b/src/i18n/locales/zh-CN.json
+@@ -1195,6 +1195,7 @@
+     "windows_idle": "没有正在计时的窗口",
+     "windows_empty_session": "当前页面没有凭证提供 5 小时配额窗口。",
+     "windows_now_pace": "{{label}} 按进度：剩余 {{percent}}%",
++    "windows_refresh": "刷新",
+     "windows_legend_current": "当前窗口",
+     "windows_legend_upcoming": "即将开始",
+     "windows_legend_elapsed": "已结束",
+@@ -1203,6 +1204,8 @@
+     "windows_reset_credit": "主动重置",
+     "windows_credit_granted": "获得时间",
+     "windows_credit_expires": "过期时间",
++    "windows_next_reset": "重置",
++    "windows_credit_expiry_short": "重置额度于 {{date}} 过期",
+     "windows_note_weekly": "每条表示一个完整的配额窗口，从开启到重置。同时结束的窗口会争用相同的日期。",
+     "windows_note_session": "每条表示一个 5 小时窗口。仅显示有正在计时窗口的凭证，其余保持为空。",
+     "weekday_sun": "日",
+diff --git a/src/i18n/locales/zh-TW.json b/src/i18n/locales/zh-TW.json
+index fd35867..6722817 100644
+--- a/src/i18n/locales/zh-TW.json
++++ b/src/i18n/locales/zh-TW.json
+@@ -1221,6 +1221,7 @@
+     "windows_idle": "沒有正在計時的視窗",
+     "windows_empty_session": "目前頁面沒有憑證提供 5 小時配額視窗。",
+     "windows_now_pace": "{{label}} 按進度：剩餘 {{percent}}%",
++    "windows_refresh": "重新整理",
+     "windows_now_pace": "{{label}} 按進度：剩餘 {{percent}}%",
+     "windows_legend_current": "目前視窗",
+     "windows_legend_upcoming": "即將開始",
+@@ -1230,6 +1231,8 @@
+     "windows_reset_credit": "主動重設",
+     "windows_credit_granted": "取得時間",
+     "windows_credit_expires": "過期時間",
++    "windows_next_reset": "重設",
++    "windows_credit_expiry_short": "重設額度於 {{date}} 過期",
+     "windows_note_weekly": "每條表示一個完整的配額視窗，從開啟到重設。同時結束的視窗會競用相同的日期。",
+     "windows_note_session": "每條表示一個 5 小時視窗。僅顯示有正在計時視窗的憑證，其餘保持為空。",
+     "weekday_sun": "日",
+diff --git a/tests/quotaTimeline.test.ts b/tests/quotaTimeline.test.ts
+index ec51560..0e286fc 100644
+--- a/tests/quotaTimeline.test.ts
++++ b/tests/quotaTimeline.test.ts
+@@ -69,17 +69,16 @@ describe('windowsIn', () => {
+ describe('span boundaries', () => {
+   test('startOfDay and startOfWeek land on local midnight', () => {
+     const mid = at(2026, 6, 29, 14, 37);
+-    expect(new Date(startOfDay(mid)).getHours()).toBe(0);
+-    expect(new Date(startOfWeek(mid)).getDay()).toBe(0);
+-    expect(new Date(startOfWeek(mid)).getHours()).toBe(0);
++    expect(new Date(startOfDay(mid)).toISOString()).toBe('2026-07-29T05:00:00.000Z');
++    expect(new Date(startOfWeek(mid)).toISOString()).toBe('2026-07-26T05:00:00.000Z');
+   });
+ 
+-  test('weekly span is a fortnight from the containing Sunday', () => {
++  test('weekly span starts today and looks fifteen days ahead', () => {
+     const now = at(2026, 6, 29, 14, 0); // a Wednesday
+     const span = timelineSpan('weekly', 0, now);
+ 
+-    expect(new Date(span.startMs).getDay()).toBe(0);
+-    expect(span.days).toBe(14);
++    expect(new Date(span.startMs).toISOString()).toBe('2026-07-29T05:00:00.000Z');
++    expect(span.days).toBe(15);
+     expect(span.startMs).toBeLessThanOrEqual(now);
+     expect(span.endMs).toBeGreaterThan(now);
+   });
+@@ -119,10 +118,16 @@ describe('span boundaries', () => {
+   });
+ 
+   test('spans a whole number of days even across a DST transition', () => {
+-    // US DST springs forward 2026-03-08; a fixed +14*DAY_MS would land at 23:00.
++    // US DST springs forward 2026-03-08; fixed millisecond math would land at 23:00.
+     const span = timelineSpan('weekly', 0, at(2026, 2, 10, 12));
+-    expect(new Date(span.startMs).getHours()).toBe(0);
+-    expect(new Date(span.endMs).getHours()).toBe(0);
++    const hour = (ms: number) =>
++      new Intl.DateTimeFormat('en-US', {
++        timeZone: 'America/Chicago',
++        hour: '2-digit',
++        hourCycle: 'h23',
++      }).format(new Date(ms));
++    expect(hour(span.startMs)).toBe('00');
++    expect(hour(span.endMs)).toBe('00');
+   });
+ });
+ 
+@@ -140,21 +145,22 @@ describe('extendSpanToCoverNextWindows', () => {
+   });
+ 
+   test('extends the weekly span to cover the full next window of the latest reset', () => {
+-    // Sep 10, 2026 (Thu). Base fortnight is Sep 6 – Sep 20.
++    // Sep 10, 2026 (Thu). Base forward view is Sep 10 – Sep 25.
+     const now = at(2026, 8, 10, 12);
+     const base = timelineSpan('weekly', 0, now);
+-    expect(base.days).toBe(14);
++    expect(base.days).toBe(15);
+ 
+-    // Grok resets Wed Sep 16; its next window opens there and ends Wed Sep 23.
++    // A late reset opens Sep 24 and ends Oct 1, beyond the default view.
+     const grok = lane({
+       name: 'grok.json',
+       displayName: 'Grok',
+       provider: 'xai',
+-      anchorMs: at(2026, 8, 16, 16, 28),
++      anchorMs: at(2026, 8, 24, 16, 28),
++      periodHours: 30 * 24,
+     });
+ 
+     const extended = extendSpanToCoverNextWindows(base, [grok], now);
+-    expect(extended.endMs).toBeGreaterThanOrEqual(at(2026, 8, 23, 16, 28));
++    expect(extended.endMs).toBeGreaterThanOrEqual(at(2026, 9, 24, 16, 28));
+     expect(extended.days).toBeGreaterThan(base.days);
+     // Rounded up to a whole number of days from the same start.
+     expect((extended.endMs - extended.startMs) % DAY_MS).toBe(0);
+@@ -164,7 +170,7 @@ describe('extendSpanToCoverNextWindows', () => {
+   test('returns the base span unchanged when no next window needs extension', () => {
+     const now = at(2026, 8, 10, 12);
+     const base = timelineSpan('weekly', 0, now);
+-    // Next window ends Sep 19, inside the Sep 6 – Sep 20 base span.
++    // Next window ends Sep 19, inside the Sep 10 – Sep 25 base span.
+     const lane = {
+       name: 'a.json',
+       displayName: 'Alice',
+diff --git a/tests/quotaTimelineRendering.test.ts b/tests/quotaTimelineRendering.test.ts
+index accc7fb..c0a1fcf 100644
+--- a/tests/quotaTimelineRendering.test.ts
++++ b/tests/quotaTimelineRendering.test.ts
+@@ -168,7 +168,7 @@ describe('QuotaTimeline rendering', () => {
+     );
+ 
+     expect(markup).toContain('>57%<');
+-    expect(markup).toContain('on-pace: 57% remaining');
++    expect(markup).toMatch(/title="[^"]*57%[^"]*"/);
+   });
+ 
+   test('renders the draggable zoom slider under the chart', () => {
+@@ -216,14 +216,42 @@ describe('QuotaTimeline rendering', () => {
+       })
+     );
+ 
+-    // The next weekly period starts on Sunday 08/02. The button remains the
++    // The next weekly period starts seven days after today, on 08/05. The button remains the
+     // shortcut back to Today (aria-label/title), but its visible label now
+     // reflects the period selected with the previous/next arrows.
+     expect(markup).toMatch(
+-      /<button type="button" aria-label="[^"]+" title="[^"]+">08\/02<\/button>/
++      /<button type="button" aria-label="[^"]+" title="[^"]+">08\/05<\/button>/
+     );
+   });
+ 
++  test('shows the verified Codex reset and distinguishes reset-credit expiry', () => {
++    const now = new Date('2026-09-12T06:15:00-05:00').getTime();
++    const reset = new Date('2026-09-19T05:30:33-05:00').getTime();
++    const creditExpiry = '2026-09-21T00:24:10.776545Z'; // 09/20 19:24 America/Chicago
++    const markup = renderToStaticMarkup(
++      createElement(QuotaTimeline, {
++        entries: [{ file: { name: 'Codex', type: 'codex' }, type: 'codex' }],
++        displayNameFor: (name: string) => name,
++        resolvedTheme: 'light',
++        now,
++        quotaFor: () => ({
++          status: 'success',
++          windows: [
++            { id: 'weekly', usedPercent: 1, resetAtMs: reset, periodHours: 168 },
++          ],
++          rateLimitResetCredits: [
++            { id: 'credit-1', status: 'available', expiresAt: creditExpiry },
++          ],
++        }),
++      })
++    );
++
++    expect(markup).toContain(`data-next-reset-ms="${reset}"`);
++    expect(markup).toContain('09/19 05:30');
++    expect(markup).toContain('09/20');
++    expect(markup).toContain('data-today="1"');
++  });
++
+   test('keeps the panel and controls visible when 5-hour mode has no matching lanes', () => {
+     const weeklyOnlyQuota = {
+       status: 'success' as const,
+@@ -324,7 +352,7 @@ describe('QuotaTimeline rendering', () => {
+     );
+ 
+     expect(markup).toContain('role="img"');
+-    expect(markup).toContain('08/03 12:00');
++    expect(markup).toContain('08/03 07:00');
+   });
+ 
+   test('stays hidden before any credential exposes a usable quota window', () => {
+@@ -337,4 +365,45 @@ describe('QuotaTimeline rendering', () => {
+ 
+     expect(markup).toBe('');
+   });
++
++  describe('windows-section refresh action', () => {
++    const windowProps = {
++      ...baseProps,
++      quotaFor: () => ({
++        status: 'success' as const,
++        windows: [
++          {
++            id: 'seven-day',
++            label: 'All models',
++            usedPercent: 41,
++            resetAtMs: new Date(2026, 6, 31, 12).getTime(),
++            periodHours: 168,
++          },
++        ],
++      }),
++    };
++
++    test('renders the page refresh action inside the timeline header', () => {
++      const markup = renderToStaticMarkup(
++        createElement(QuotaTimeline, { ...windowProps, onRefreshAll: () => {} })
++      );
++
++      expect(markup).toContain('data-quota-windows-refresh="1"');
++      expect(markup).not.toContain('data-quota-windows-refresh="1" disabled');
++    });
++
++    test('carries no refresh button when the page owns no handler', () => {
++      const markup = renderToStaticMarkup(createElement(QuotaTimeline, windowProps));
++
++      expect(markup).not.toContain('data-quota-windows-refresh');
++    });
++
++    test('disables the refresh action while a refresh is in flight', () => {
++      const markup = renderToStaticMarkup(
++        createElement(QuotaTimeline, { ...windowProps, refreshing: true, onRefreshAll: () => {} })
++      );
++
++      expect(markup).toContain('data-quota-windows-refresh="1" disabled=""');
++    });
++  });
+ });
+diff --git a/docs/QUOTA-WINDOWS.md b/docs/QUOTA-WINDOWS.md
+new file mode 100644
+index 0000000..13910c5
+--- /dev/null
++++ b/docs/QUOTA-WINDOWS.md
+@@ -0,0 +1,16 @@
++# Quota-window authority
++
++Run `bun run audit:quota` from the CPAMC fork to obtain a fresh, sanitized reset ledger. The command reads existing signed-in local credentials, calls the same provider endpoints as CPAMC, and prints reset instants without printing tokens, account identifiers, or raw payloads.
++
++Current verified state on September 12, 2026:
++
++- Codex main seven-day window resets Saturday, September 19 at 5:30 AM America/Chicago.
++- Codex Spark seven-day window resets Saturday, September 19 at 6:48 AM America/Chicago. Spark does not replace the main Codex lane.
++- The earliest Codex manual reset credit expires Sunday, September 20 at 7:24 PM America/Chicago. A credit expiration is not a quota reset.
++- Claude seven-day quota resets Wednesday, September 16 at 2:00 AM America/Chicago.
++- Grok weekly quota resets Wednesday, September 16 at 4:28 PM America/Chicago.
++- Cursor currently reports a 30-day reset on Saturday, September 19 at 5:47 AM America/Chicago.
++- Muse does not expose a reset instant in its sidecar response. CPAMC derives its weekly display from the documented Sunday 7:00 PM America/Chicago cadence and must label that value as derived, not live.
++- Antigravity reset instants come from each live quota bucket. CPAMC must not invent a reset when the provider omits it.
++
++The timeline always formats dates in `America/Chicago`, begins at the current Central day, and refreshes visible provider data every five minutes. Provider reset bars and Codex reset-credit expirations use separate labels and marks.
+diff --git a/tools/audit-quota-windows.ts b/tools/audit-quota-windows.ts
+new file mode 100644
+index 0000000..7d3384c
+--- /dev/null
++++ b/tools/audit-quota-windows.ts
+@@ -0,0 +1,185 @@
++import { homedir } from 'node:os';
++import { join } from 'node:path';
++import { readdir } from 'node:fs/promises';
++
++type Event = {
++  provider: string;
++  window: string;
++  at: string | null;
++  central: string | null;
++  periodHours: number | null;
++  source: 'live' | 'derived';
++};
++
++type UsageWindow = {
++  limit_window_seconds?: number;
++  reset_at?: number;
++};
++type CodexUsage = {
++  rate_limit?: { primary_window?: UsageWindow };
++  additional_rate_limits?: Array<{
++    rate_limit?: { primary_window?: UsageWindow; secondary_window?: UsageWindow };
++  }>;
++};
++type CreditPayload = { credits?: Array<{ expires_at?: string }> };
++type ClaudeUsage = Record<string, { resets_at?: string }>;
++type XaiBilling = {
++  config?: { currentPeriod?: { type?: string; end?: string } };
++};
++type SidecarPayload = {
++  windows?: Array<{ id?: string; reset_at_ms?: number; period_hours?: number }>;
++};
++
++const AUTH_DIR = join(homedir(), '.cli-proxy-api');
++const CENTRAL = new Intl.DateTimeFormat('en-US', {
++  timeZone: 'America/Chicago',
++  weekday: 'short',
++  month: '2-digit',
++  day: '2-digit',
++  year: 'numeric',
++  hour: '2-digit',
++  minute: '2-digit',
++  hour12: false,
++});
++
++const central = (value: string | number | null): string | null => {
++  if (value === null) return null;
++  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
++  return Number.isFinite(date.getTime()) ? CENTRAL.format(date) : null;
++};
++
++async function activeAuth(prefix: string): Promise<Record<string, unknown> | null> {
++  const names = (await readdir(AUTH_DIR)).filter(
++    (name) => name.startsWith(`${prefix}-`) && name.endsWith('.json')
++  );
++  for (const name of names) {
++    const data = await Bun.file(join(AUTH_DIR, name)).json();
++    if (data.disabled !== true && typeof data.access_token === 'string') return data;
++  }
++  return null;
++}
++
++async function getJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
++  const response = await fetch(url, { headers });
++  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
++  return (await response.json()) as T;
++}
++
++const events: Event[] = [];
++const errors: string[] = [];
++
++async function auditCodex() {
++  const auth = await activeAuth('codex');
++  if (!auth) throw new Error('no active Codex credential');
++  const headers: Record<string, string> = {
++    Authorization: ['Bearer', auth.access_token].join(' '),
++    Accept: 'application/json',
++    'OpenAI-Beta': 'codex-1',
++    Originator: 'Codex Desktop',
++  };
++  if (typeof auth.account_id === 'string') headers['Chatgpt-Account-Id'] = auth.account_id;
++  const usage = await getJson<CodexUsage>('https://chatgpt.com/backend-api/wham/usage', headers);
++  const add = (window: UsageWindow | undefined, label: string) => {
++    if (!window) return;
++    const seconds = Number(window.limit_window_seconds);
++    const resetAt = Number(window.reset_at);
++    events.push({
++      provider: 'Codex',
++      window: label,
++      at: Number.isFinite(resetAt) ? new Date(resetAt * 1000).toISOString() : null,
++      central: Number.isFinite(resetAt) ? central(resetAt) : null,
++      periodHours: Number.isFinite(seconds) ? seconds / 3600 : null,
++      source: 'live',
++    });
++  };
++  add(usage.rate_limit?.primary_window, 'main');
++  for (const [index, limit] of (usage.additional_rate_limits ?? []).entries()) {
++    add(limit.rate_limit?.primary_window, `additional-${index}-primary`);
++    add(limit.rate_limit?.secondary_window, `additional-${index}-secondary`);
++  }
++  const credits = await getJson<CreditPayload>(
++    'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits',
++    headers
++  );
++  for (const credit of credits.credits ?? []) {
++    events.push({
++      provider: 'Codex',
++      window: 'reset-credit-expiry',
++      at: credit.expires_at ?? null,
++      central: central(credit.expires_at ?? null),
++      periodHours: null,
++      source: 'live',
++    });
++  }
++}
++
++async function auditClaude() {
++  const auth = await activeAuth('claude');
++  if (!auth) throw new Error('no active Claude credential');
++  const data = await getJson<ClaudeUsage>('https://api.anthropic.com/api/oauth/usage', {
++    Authorization: ['Bearer', auth.access_token].join(' '),
++    'anthropic-beta': 'oauth-2025-04-20',
++  });
++  for (const [name, window] of Object.entries(data)) {
++    if (!window?.resets_at) continue;
++    events.push({
++      provider: 'Claude',
++      window: name,
++      at: window.resets_at,
++      central: central(window.resets_at),
++      periodHours: name === 'five_hour' ? 5 : name.startsWith('seven_day') ? 168 : null,
++      source: 'live',
++    });
++  }
++}
++
++async function auditXai() {
++  const auth = await activeAuth('xai');
++  if (!auth) throw new Error('no active xAI credential');
++  const data = await getJson<XaiBilling>('https://cli-chat-proxy.grok.com/v1/billing?format=credits', {
++    Authorization: ['Bearer', auth.access_token].join(' '),
++  });
++  const period = data.config?.currentPeriod;
++  events.push({
++    provider: 'Grok',
++    window: period?.type ?? 'unknown',
++    at: period?.end ?? null,
++    central: central(period?.end ?? null),
++    periodHours: period?.type === 'USAGE_PERIOD_TYPE_WEEKLY' ? 168 : null,
++    source: 'live',
++  });
++}
++
++async function auditSidecar(provider: string, path: string) {
++  const data = await getJson<SidecarPayload>(`http://127.0.0.1:47193/${path}`);
++  for (const window of data.windows ?? []) {
++    const resetAtMs = Number(window.reset_at_ms);
++    events.push({
++      provider,
++      window: window.id ?? 'unknown',
++      at: Number.isFinite(resetAtMs) && resetAtMs > 0 ? new Date(resetAtMs).toISOString() : null,
++      central: Number.isFinite(resetAtMs) && resetAtMs > 0 ? central(resetAtMs / 1000) : null,
++      periodHours: Number(window.period_hours) || null,
++      source: 'live',
++    });
++  }
++}
++
++for (const [name, task] of [
++  ['Codex', auditCodex],
++  ['Claude', auditClaude],
++  ['Grok', auditXai],
++  ['Cursor', () => auditSidecar('Cursor', 'cursor-usage')],
++  ['Muse', () => auditSidecar('Muse', 'muse-usage')],
++] as const) {
++  try {
++    await task();
++  } catch (error) {
++    errors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
++  }
++}
++
++const mainCodex = events.find((event) => event.provider === 'Codex' && event.window === 'main');
++const ok = Boolean(mainCodex?.at && mainCodex.periodHours === 168) && errors.length === 0;
++console.log(JSON.stringify({ ok, generatedAt: new Date().toISOString(), timezone: 'America/Chicago', events, errors }, null, 2));
++if (!ok) process.exitCode = 1;
+diff --git a/src/features/quota/quotaRefreshClock.ts b/src/features/quota/quotaRefreshClock.ts
+new file mode 100644
+index 0000000..27bc8bf
+--- /dev/null
++++ b/src/features/quota/quotaRefreshClock.ts
+@@ -0,0 +1,14 @@
++/**
++ * Quota payloads can contain relative reset offsets. Once resolved, those
++ * offsets are only correct for the fetch that produced them. Long-lived CPAMC
++ * tabs therefore need a bounded refresh cadence instead of treating the first
++ * successful response as permanent.
++ */
++
++export const QUOTA_AUTO_REFRESH_MS = 5 * 60_000;
++
++/** Stable key that changes every five minutes, including across midnight. */
++export function quotaRefreshBucket(nowMs: number): number {
++  return Math.floor(nowMs / QUOTA_AUTO_REFRESH_MS);
++}
++
+diff --git a/tests/quotaRefreshClock.test.ts b/tests/quotaRefreshClock.test.ts
+new file mode 100644
+index 0000000..f534c7d
+--- /dev/null
++++ b/tests/quotaRefreshClock.test.ts
+@@ -0,0 +1,26 @@
++import { describe, expect, test } from 'bun:test';
++import {
++  QUOTA_AUTO_REFRESH_MS,
++  quotaRefreshBucket,
++} from '@/features/quota/quotaRefreshClock';
++
++describe('quota refresh clock', () => {
++  test('advances after five minutes so relative reset metadata cannot remain stale', () => {
++    const sample = Date.parse('2026-09-12T05:59:00-05:00');
++    const fetchedAt = quotaRefreshBucket(sample) * QUOTA_AUTO_REFRESH_MS;
++
++    expect(quotaRefreshBucket(fetchedAt + QUOTA_AUTO_REFRESH_MS - 1)).toBe(
++      quotaRefreshBucket(fetchedAt)
++    );
++    expect(quotaRefreshBucket(fetchedAt + QUOTA_AUTO_REFRESH_MS)).toBe(
++      quotaRefreshBucket(fetchedAt) + 1
++    );
++  });
++
++  test('changes across Central midnight instead of retaining the prior weekday', () => {
++    const beforeMidnight = Date.parse('2026-09-11T23:59:00-05:00');
++    const afterMidnight = Date.parse('2026-09-12T00:01:00-05:00');
++
++    expect(quotaRefreshBucket(afterMidnight)).not.toBe(quotaRefreshBucket(beforeMidnight));
++  });
++});

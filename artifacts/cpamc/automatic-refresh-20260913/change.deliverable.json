@@ -1,0 +1,31 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "Automatic quota refresh",
+  "kind": "markdown_doc",
+  "produced_by": "cpamc-fork-modification",
+  "artifacts": {
+    "primary": "review.md",
+    "source": "cpamc-change.json",
+    "supporting": [
+      "validation.log",
+      "diff.patch",
+      "proof/browser.json"
+    ]
+  },
+  "scope": {
+    "must_cover": [
+      "five minutes",
+      "sleep",
+      "busy",
+      "background",
+      "rollback"
+    ]
+  },
+  "floors": {
+    "min_words": 100
+  },
+  "forbidden_tokens": [
+    "TODO",
+    "Lorem ipsum"
+  ]
+}

@@ -31,9 +31,9 @@ export function useQuotaBatchLoader() {
   const requestIdRef = useRef(0);
 
   const loadQuota = useCallback(
-    async (targets: QuotaFileEntry[]) => {
-      if (loadingRef.current) return;
-      if (targets.length === 0) return;
+    async (targets: QuotaFileEntry[], background = false): Promise<boolean> => {
+      if (loadingRef.current) return false;
+      if (targets.length === 0) return false;
       loadingRef.current = true;
       const requestId = ++requestIdRef.current;
       const cacheGeneration = captureQuotaCacheGeneration();
@@ -56,7 +56,11 @@ export function useQuotaBatchLoader() {
               setQuota((prev) => {
                 const nextState = { ...prev };
                 entries.forEach(({ file }) => {
-                  nextState[file.name] = adapter.buildLoadingState();
+                  // Keep successful readings and timeline geometry visible while
+                  // the automatic refresh is in flight. Errors still replace them.
+                  if (!background || prev[file.name]?.status !== 'success') {
+                    nextState[file.name] = adapter.buildLoadingState();
+                  }
                 });
                 return nextState;
               });
@@ -98,6 +102,7 @@ export function useQuotaBatchLoader() {
             });
           })
         );
+        return true;
       } finally {
         if (requestId === requestIdRef.current) {
           setBatchLoading(false);

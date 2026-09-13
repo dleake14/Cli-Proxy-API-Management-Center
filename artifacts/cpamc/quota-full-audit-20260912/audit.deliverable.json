@@ -1,0 +1,28 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC quota-window audit",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "audit.md",
+    "source": "cpamc-change.json",
+    "supporting": ["validation.log", "diff.patch", "proof.html", "live-quota-audit.json"]
+  },
+  "scope": {
+    "must_cover": [
+      "Codex seven-day quota",
+      "September 19, 2026 at 5:30 AM Central",
+      "September 20 at 7:24 PM Central",
+      "Claude",
+      "Grok",
+      "Cursor",
+      "Muse",
+      "Antigravity",
+      "America/Chicago",
+      "bun run audit:quota",
+      "bun run verify"
+    ]
+  },
+  "floors": {"min_words": 220, "min_words_per_covered_term": 1},
+  "forbidden_tokens": ["TODO", "Lorem ipsum", "Bearer ", "access_token"]
+}

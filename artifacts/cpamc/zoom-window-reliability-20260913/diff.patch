@@ -1,0 +1,323 @@
+--- a/src/features/quota/quotaTimelineModel.ts
++++ b/src/features/quota/quotaTimelineModel.ts
+@@ -44,7 +44,7 @@
+ 
+ export function clampTimelineZoomDays(mode: TimelineMode, visibleDays: number): number {
+   const { min, max } = TIMELINE_ZOOM_BOUNDS[mode];
+-  return Math.max(min, Math.min(max, Math.round(visibleDays)));
++  return Math.max(min, Math.min(max, Math.round(Number.isFinite(visibleDays) ? visibleDays : TIMELINE_ZOOM_BOUNDS[mode].default)));
+ }
+ 
+ /** The rolling window the session view projects, in hours. */
+@@ -159,7 +159,7 @@
+   fromMs: number,
+   toMs: number
+ ): { startMs: number; endMs: number }[] {
+-  if (!Number.isFinite(anchorMs) || !(periodMs > 0)) return [];
++  if (![anchorMs, periodMs, fromMs, toMs].every(Number.isFinite) || !(periodMs > 0)) return [];
+   if (!(toMs > fromMs)) return [];
+ 
+   // Guard against a pathological period (a bad payload) turning this into a
+@@ -167,11 +167,12 @@
+   const maxWindows = Math.ceil((toMs - fromMs) / periodMs) + 2;
+   if (maxWindows > 1000) return [];
+ 
+-  let end = anchorMs + Math.ceil((fromMs - anchorMs) / periodMs) * periodMs;
++  const firstEnd = anchorMs + Math.ceil((fromMs - anchorMs) / periodMs) * periodMs;
+   const out: { startMs: number; endMs: number }[] = [];
+-  while (end - periodMs < toMs) {
++  for (let index = 0; index < maxWindows; index += 1) {
++    const end = firstEnd + index * periodMs;
++    if (end - periodMs >= toMs) break;
+     out.push({ startMs: end - periodMs, endMs: end });
+-    end += periodMs;
+   }
+   return out;
+ }
+@@ -433,7 +434,8 @@
+  * windows fall outside the visible span still gets a row, and says so.
+  */
+ export function laneHasWindow(lane: TimelineLane): boolean {
+-  return lane.anchorMs !== null;
++  return lane.anchorMs !== null && Number.isFinite(lane.anchorMs) &&
++    lane.periodHours !== null && Number.isFinite(lane.periodHours) && lane.periodHours > 0;
+ }
+ 
+ /* ------------------------------------------------------------------ lanes */
+@@ -523,7 +525,8 @@
+   windowStartMs: number,
+   windowEndMs: number
+ ): number | null {
+-  if (nowMs < windowStartMs || nowMs >= windowEndMs) return null;
++  if (![nowMs, windowStartMs, windowEndMs].every(Number.isFinite) ||
++      nowMs < windowStartMs || nowMs >= windowEndMs) return null;
+   const duration = windowEndMs - windowStartMs;
+   if (!(duration > 0)) return null;
+   return clampPercent(Math.round((100 * (windowEndMs - nowMs)) / duration));
+@@ -788,6 +791,7 @@
+  * and Cursor Models sit on top because they are the tighter limits in practice.
+  */
+ export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
++  if (input.quota?.status !== 'success') return [buildTimelineLane(input)];
+   if ((input.maxPeriodHours ?? Infinity) < WEEKLY_VIEW_MIN_HOURS) {
+     return [buildTimelineLane(input)];
+   }
+@@ -798,6 +802,18 @@
+     const fable = windows.find((window) => window.id === 'seven-day-fable');
+     const allModels = windows.find((window) => window.id === 'seven-day');
+     if (!fable && !allModels) return [buildTimelineLane(input)];
++
++    // Independent pools may reset at different instants. Never borrow the
++    // Fable clock for the account-wide allowance.
++    if (fable && allModels && (fable.resetAtMs !== allModels.resetAtMs ||
++        fable.periodHours !== allModels.periodHours)) {
++      return [fable, allModels].map((window) => buildTimelineLane({
++        ...input,
++        name: `${input.name}:${window.id}`,
++        displayName: `${input.displayName} · ${window.label ?? window.id}`,
++        quota: claudeWindowQuota(quota, [window]),
++      }));
++    }
+ 
+     const stackedBars: TimelineStackedBar[] = [];
+     if (fable) {
+@@ -896,3 +912,31 @@
+ 
+   return [buildTimelineLane(input)];
+ }
++
++/** Zoom around today's position without changing any provider's clock. */
++export function zoomCurrentSpan(
++  span: { startMs: number; endMs: number; days: number },
++  now: number,
++  mode: TimelineMode,
++  visibleDays: number
++): { startMs: number; endMs: number; days: number } {
++  const days = clampTimelineZoomDays(mode, visibleDays);
++  const fraction = Math.max(0, Math.min(1, (now - span.startMs) / (span.endMs - span.startMs)));
++  const startMs = startOfDay(now - fraction * days * DAY_MS);
++  return { startMs, endMs: addCalendarDays(startMs, days), days };
++}
++
++/** Used fill ends at its full-window position, even when either edge is cropped. */
++export function visibleUsedPercent(
++  window: Pick<TimelineWindow, 'startMs' | 'endMs'>,
++  remaining: number,
++  spanStartMs: number,
++  spanEndMs: number
++): number {
++  if (![window.startMs, window.endMs, remaining, spanStartMs, spanEndMs].every(Number.isFinite)) return 0;
++  const left = Math.max(window.startMs, spanStartMs);
++  const right = Math.min(window.endMs, spanEndMs);
++  if (right <= left) return 0;
++  const usedEnd = window.startMs + (window.endMs - window.startMs) * (1 - clampPercent(remaining) / 100);
++  return clampPercent(100 * (usedEnd - left) / (right - left));
++}
+--- a/src/features/quota/components/QuotaTimeline.tsx
++++ b/src/features/quota/components/QuotaTimeline.tsx
+@@ -29,6 +29,8 @@
+   currentWindowSpan,
+   addCalendarDays,
+   timelineSpanZoomed,
++  zoomCurrentSpan,
++  visibleUsedPercent,
+   TIMELINE_ZOOM_BOUNDS,
+ } from '../quotaTimelineModel';
+ import type { TimelineLane, TimelineMode } from '../quotaTimelineModel';
+@@ -191,10 +193,12 @@
+   );
+ 
+   const span = useMemo(
+-    () => fitCurrent && offset === 0
+-      ? currentWindowSpan(lanes, now, TIMELINE_ZOOM_BOUNDS[mode].default)
+-      : baseSpan,
+-    [fitCurrent, offset, lanes, now, mode, baseSpan]
++    () => {
++      if (offset !== 0) return baseSpan;
++      const current = currentWindowSpan(lanes, now, TIMELINE_ZOOM_BOUNDS[mode].default);
++      return fitCurrent ? current : zoomCurrentSpan(current, now, mode, zoomDays);
++    },
++    [fitCurrent, offset, lanes, now, mode, baseSpan, zoomDays]
+   );
+   const displayedZoom = fitCurrent && offset === 0 ? span.days : zoomDays;
+ 
+@@ -482,9 +486,13 @@
+     return bars.map((bar, index) => ({
+       ...bar,
+       scheduled,
++      paceText: t('quota_management.windows_now_pace', {
++        defaultValue: '{{label}} on-pace: {{percent}}% remaining',
++        label: '', percent: scheduled,
++      }).trim().split(`${scheduled}%`),
+       topPercent: ((index + 0.5) / bars.length) * 100,
+     }));
+-  }, [liveWindow, lane.displayName, lane.name, now, nowPercent, stackedBars]);
++  }, [liveWindow, lane.displayName, lane.name, now, nowPercent, stackedBars, t]);
+ 
+   const colorSet = TYPE_COLORS[lane.provider] || TYPE_COLORS.unknown;
+   const color: ThemeColors =
+@@ -590,7 +598,7 @@
+               percent: mark.scheduled,
+             })}
+           >
+-            {mark.scheduled}%
++            {mark.paceText[0]}<span>{mark.scheduled}%</span>{mark.paceText[1]}
+           </span>
+         ))}
+ 
+@@ -610,12 +618,14 @@
+                 ? formatTime(window.endMs)
+                 : `${formatDay(window.endMs)} ${formatTime(window.endMs)}`;
+ 
+-            if (stackedBars.length > 0 && window.state === 'live') {
++            if (stackedBars.length > 0 && window.state === 'live' && window.endMs === lane.anchorMs) {
+               return (
+                 <div
+                   key={window.startMs}
+                   className={styles.stackedWindow}
+                   data-window-state={window.state}
++                  data-clipped-start={window.startMs < span.startMs ? 1 : 0}
++                  data-clipped-end={window.endMs > span.endMs ? 1 : 0}
+                   data-window-start-ms={window.startMs}
+                   data-window-end-ms={window.endMs}
+                   style={{ left: `${window.leftPercent}%`, width: `${window.widthPercent}%` }}
+@@ -645,7 +655,7 @@
+                         {bar.remaining !== null && (
+                           <span
+                             className={styles.windowFill}
+-                            style={{ width: `${100 - bar.remaining}%` }}
++                            style={{ width: `${visibleUsedPercent(window, bar.remaining, span.startMs, span.endMs)}%` }}
+                           />
+                         )}
+                         <span
+@@ -674,6 +684,8 @@
+                 key={window.startMs}
+                 className={`${styles.window} ${styles[`window${capitalize(window.state)}`]}`}
+                 data-window-state={window.state}
++                  data-clipped-start={window.startMs < span.startMs ? 1 : 0}
++                  data-clipped-end={window.endMs > span.endMs ? 1 : 0}
+                 data-window-start-ms={window.startMs}
+                 data-window-end-ms={window.endMs}
+                 style={{ left: `${window.leftPercent}%`, width: `${window.widthPercent}%` }}
+@@ -688,7 +700,7 @@
+                 {window.remaining !== null && (
+                   <span
+                     className={styles.windowFill}
+-                    style={{ width: `${100 - window.remaining}%` }}
++                    style={{ width: `${visibleUsedPercent(window, window.remaining, span.startMs, span.endMs)}%` }}
+                   />
+                 )}
+                 {showLabel && (
+--- a/src/features/quota/components/QuotaTimeline.module.scss
++++ b/src/features/quota/components/QuotaTimeline.module.scss
+@@ -584,3 +584,17 @@
+     min-width: 720px;
+   }
+ }
++
++// A cropped viewport edge is not a quota reset. Keep it visibly open.
++.window[data-clipped-start='1'],
++.stackedWindow[data-clipped-start='1'] .stackBar {
++  border-top-left-radius: 0;
++  border-bottom-left-radius: 0;
++  border-left-style: dashed;
++}
++.window[data-clipped-end='1'],
++.stackedWindow[data-clipped-end='1'] .stackBar {
++  border-top-right-radius: 0;
++  border-bottom-right-radius: 0;
++  border-right-style: dashed;
++}
+--- a/tests/quotaTimeline.test.ts
++++ b/tests/quotaTimeline.test.ts
+@@ -19,6 +19,8 @@
+   TIMELINE_ZOOM_BOUNDS,
+   scheduledRemainingAt,
+   windowsIn,
++  zoomCurrentSpan,
++  visibleUsedPercent,
+ } from '../src/features/quota/quotaTimelineModel';
+ import type { TimelineLane } from '../src/features/quota/quotaTimelineModel';
+ 
+@@ -981,3 +983,58 @@
+     expect(lane.anchorMs).toBeNull();
+   });
+ });
++
++describe('zoom and quota clock regressions', () => {
++  const reset = Date.parse('2026-09-16T02:00:00-05:00');
++  const now = Date.parse('2026-09-13T10:00:00-05:00');
++  const window = { startMs: reset - 7 * DAY_MS, endMs: reset };
++
++  test('Wednesday 02:00 quota is 62% elapsed on Sunday, independent of zoom', () => {
++    expect(scheduledRemainingAt(now, window.startMs, reset)).toBe(38);
++    expect(85).toBeGreaterThan(scheduledRemainingAt(now, window.startMs, reset)!);
++    const lane: TimelineLane = { name: 'Claude', displayName: 'Claude', provider: 'claude',
++      anchorMs: reset, periodHours: 168, remaining: 85, limits: [], resetCredits: [] };
++    const fitted = currentWindowSpan([lane], now, 15);
++    for (let days = 3; days <= 30; days += 1) {
++      const span = zoomCurrentSpan(fitted, now, 'weekly', days);
++      expect(span.startMs).toBeLessThanOrEqual(now);
++      expect(span.endMs).toBeGreaterThan(now);
++      const live = projectLane(lane, span.startMs, span.endMs, now, 'weekly').find(w => w.state === 'live')!;
++      expect(live.startMs).toBe(window.startMs);
++      expect(live.endMs).toBe(reset);
++      expect(live.remaining).toBe(85);
++      expect(scheduledRemainingAt(now, live.startMs, live.endMs)).toBe(38);
++    }
++  });
++
++  test('clipped usage ends at the original window position, never restarts at the viewport', () => {
++    expect(visibleUsedPercent(window, 85, now - DAY_MS, reset + DAY_MS)).toBe(0);
++    expect(visibleUsedPercent(window, 50, window.startMs + 2 * DAY_MS, reset)).toBeCloseTo(30);
++    expect(visibleUsedPercent(window, 50, window.startMs, window.startMs + DAY_MS)).toBe(100);
++  });
++
++  test('rejects non-finite periods and clocks without hanging or drawing invalid percentages', () => {
++    expect(windowsIn(reset, Infinity, now, reset)).toEqual([]);
++    expect(windowsIn(reset, HOUR_MS, now, Infinity)).toEqual([]);
++    expect(scheduledRemainingAt(NaN, window.startMs, reset)).toBeNull();
++    expect(clampTimelineZoomDays('weekly', NaN)).toBe(15);
++  });
++
++  test('failed refresh does not resurrect retained stacked readings as successful', () => {
++    const lanes = buildTimelineLanes({name:'Claude', displayName:'Claude', provider:'claude',
++      quota: {status:'error', windows:[{id:'seven-day-fable', resetAtMs:reset, periodHours:168, usedPercent:15}]} as never,
++      maxPeriodHours:Infinity});
++    expect(lanes[0].anchorMs).toBeNull();
++    expect(lanes[0].stackedBars).toBeUndefined();
++  });
++
++  test('independent Claude pools keep their own reset clocks', () => {
++    const lanes = buildTimelineLanes({name:'Claude', displayName:'Claude', provider:'claude',
++      quota: {status:'success', windows:[
++        {id:'seven-day-fable', resetAtMs:reset, periodHours:168, usedPercent:15},
++        {id:'seven-day', resetAtMs:reset + DAY_MS, periodHours:168, usedPercent:20},
++      ]} as never, maxPeriodHours:Infinity});
++    expect(lanes.map(lane => lane.anchorMs)).toEqual([reset, reset + DAY_MS]);
++    expect(lanes.map(lane => lane.remaining)).toEqual([85,80]);
++  });
++});
+--- a/tests/quotaTimelineRendering.test.ts
++++ b/tests/quotaTimelineRendering.test.ts
+@@ -425,3 +425,20 @@
+     });
+   });
+ });
++
++describe('stacked quota expiry', () => {
++  test('does not carry Fable usage into an unreported week', () => {
++    const reset = Date.parse('2026-09-16T02:00:00-05:00');
++    const markup = renderToStaticMarkup(createElement(QuotaTimeline, {
++      ...baseProps,
++      now: reset + 1000,
++      quotaFor: () => ({ status:'success', windows:[
++        {id:'seven-day-fable', label:'Fable', periodHours:168, resetAtMs:reset, usedPercent:15},
++        {id:'seven-day', label:'All models', periodHours:168, resetAtMs:reset, usedPercent:20},
++      ]}),
++    }));
++    expect(markup).not.toContain('<b>85%</b>');
++    expect(markup).not.toContain('85% remaining');
++    expect(markup).toContain('data-window-state="live"');
++  });
++});

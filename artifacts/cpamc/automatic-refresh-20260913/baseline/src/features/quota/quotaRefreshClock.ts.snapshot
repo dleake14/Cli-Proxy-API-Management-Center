@@ -1,0 +1,14 @@
+/**
+ * Quota payloads can contain relative reset offsets. Once resolved, those
+ * offsets are only correct for the fetch that produced them. Long-lived CPAMC
+ * tabs therefore need a bounded refresh cadence instead of treating the first
+ * successful response as permanent.
+ */
+
+export const QUOTA_AUTO_REFRESH_MS = 5 * 60_000;
+
+/** Stable key that changes every five minutes, including across midnight. */
+export function quotaRefreshBucket(nowMs: number): number {
+  return Math.floor(nowMs / QUOTA_AUTO_REFRESH_MS);
+}
+
