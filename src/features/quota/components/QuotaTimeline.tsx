@@ -598,7 +598,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               percent: mark.scheduled,
             })}
           >
-            {mark.paceText[0]}<span>{mark.scheduled}%</span>{mark.paceText[1]}
+            <span className={styles.nowMarkPercent}>{mark.scheduled}%</span>
           </span>
         ))}
 
@@ -655,13 +655,19 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                         {bar.remaining !== null && (
                           <span
                             className={styles.windowFill}
-                            style={{ width: `${visibleUsedPercent(window, bar.remaining, span.startMs, span.endMs)}%` }}
+                            style={{
+                              // A stacked pool's window can span far longer than the
+                              // zoomed-in view (Cursor's 30-day billing cycle inside a
+                              // 22-day "weekly" span). Anchoring the fill to the pool's
+                              // absolute calendar position pushed it entirely off the
+                              // left edge whenever usage happened early in a long cycle,
+                              // leaving the bar solid gray with no visible fill at all.
+                              // Fill the visible bar by the actual used share instead.
+                              width: `${Math.min(100, Math.max(0, 100 - bar.remaining))}%`,
+                            }}
                           />
                         )}
-                        <span
-                          className={styles.inBarLabel}
-                          data-swap={usedPastHalf ? 1 : 0}
-                        >
+                        <span className={styles.inBarLabel} data-swap={usedPastHalf ? 1 : 0}>
                           {usedPastHalf ? (
                             <>
                               <b>{pct}</b> {bar.label}

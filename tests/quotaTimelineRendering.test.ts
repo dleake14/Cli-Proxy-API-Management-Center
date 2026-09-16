@@ -161,6 +161,20 @@ describe('QuotaTimeline rendering', () => {
     expect(markup).toContain('data-stacked="1"');
     expect(markup).toContain('Cursor Models <b>88%</b>');
     expect(markup).toContain('<b>39%</b> Other Models');
+
+    // Cursor's 30-day billing window is longer than the default zoomed view, so
+    // the live window is clipped on its left edge (data-clipped-start="1") and
+    // the low early-cycle usage's true calendar position falls before the
+    // visible span. Anchoring the fill to that absolute calendar point (the old
+    // behavior) put both bars' fill at 0% — a flat gray bar with no visible
+    // usage. The fill must instead track the actual used share (100 - remaining)
+    // so it always shows, regardless of how much of the window is scrolled off.
+    const liveStart = markup.indexOf('data-window-state="live"');
+    expect(liveStart).toBeGreaterThan(-1);
+    expect(markup.slice(liveStart, liveStart + 60)).toContain('data-clipped-start="1"');
+    const liveBlock = markup.slice(liveStart, markup.indexOf('data-window-state="next"'));
+    expect(liveBlock).toContain('style="width:12%"');
+    expect(liveBlock).toContain('style="width:61%"');
     expect(markup).not.toContain('Included total');
   });
 

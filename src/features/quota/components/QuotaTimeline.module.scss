@@ -325,21 +325,26 @@ $lane-width: 210px;
 }
 
 // On-pace remaining at the "now" intersection — one per pool in the lane.
+// Number only, no label text (the operator already knows what it means);
+// sized 2x the old 9px chip text so it reads at a glance.
 .nowMark {
   position: absolute;
   z-index: 4;
   transform: translate(-50%, calc(-100% - 12px));
-  padding: 1px 4px;
+  padding: 2px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-tertiary) 55%, transparent);
   color: var(--text-secondary);
-  font-size: 9px;
-  font-weight: 600;
   line-height: 1.1;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.nowMarkPercent {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .window {
