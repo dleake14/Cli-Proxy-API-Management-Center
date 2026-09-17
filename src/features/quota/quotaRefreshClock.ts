@@ -14,9 +14,10 @@
 /** Legacy fixed cadence, kept as the reference period for {@link quotaRefreshBucket}. */
 export const QUOTA_AUTO_REFRESH_MS = 5 * 60_000;
 
-/** Randomized auto-refresh window: no sooner than two, no later than eight minutes. */
-export const QUOTA_REFRESH_MIN_MS = 2 * 60_000;
-export const QUOTA_REFRESH_MAX_MS = 8 * 60_000;
+/** Randomized auto-refresh window: no sooner than three, no later than seven minutes.
+ * Increased from 2-8 min to reduce rate-limiting with rate-limited providers like Claude. */
+export const QUOTA_REFRESH_MIN_MS = 3 * 60_000;
+export const QUOTA_REFRESH_MAX_MS = 7 * 60_000;
 
 /** Stable key that changes every five minutes, including across midnight. */
 export function quotaRefreshBucket(nowMs: number): number {

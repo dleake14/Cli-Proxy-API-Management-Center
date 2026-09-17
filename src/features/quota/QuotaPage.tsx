@@ -48,6 +48,7 @@ import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers
 import type { QuotaProviderType } from './providers/types';
 import { useQuotaActions } from './hooks/useQuotaActions';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
+import { authFilesRetryDelayMs } from './authFilesRetry';
 import { readQuotaUiState, writeQuotaUiState } from './uiState';
 import styles from './QuotaPage.module.scss';
 
@@ -67,6 +68,8 @@ export function QuotaPage() {
   const [files, setFiles] = useState<AuthFileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [authFilesLoadFailed, setAuthFilesLoadFailed] = useState(false);
+  const [authFilesFailureCount, setAuthFilesFailureCount] = useState(0);
   const [tab, setTab] = useState<QuotaTabId>(() => readQuotaUiState()?.tab ?? 'all');
   const [sortMode, setSortMode] = useState<QuotaSortMode>(
     () => readQuotaUiState()?.sortMode ?? 'default'
@@ -79,16 +82,25 @@ export function QuotaPage() {
 
   /* ---------- 文件列表 ---------- */
 
+  const filesLoadingRef = useRef(false);
+
   const loadFiles = useCallback(async () => {
+    if (filesLoadingRef.current) return;
+    filesLoadingRef.current = true;
     setLoading(true);
     setError('');
     try {
       const data = await authFilesApi.list();
       setFiles(data?.files || []);
+      setAuthFilesLoadFailed(false);
+      setAuthFilesFailureCount(0);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('notification.refresh_failed');
       setError(message);
+      setAuthFilesLoadFailed(true);
+      setAuthFilesFailureCount((count) => count + 1);
     } finally {
+      filesLoadingRef.current = false;
       setLoading(false);
     }
   }, [t]);
@@ -98,6 +110,28 @@ export function QuotaPage() {
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
+
+  // A cold list failure previously left `entries` empty forever: the quota
+  // refresh controller correctly refuses to fetch quota for an unknown file
+  // list, so it cannot recover the list itself. Retry only actual failures;
+  // a successful empty list is a valid steady state.
+  useEffect(() => {
+    if (!authFilesLoadFailed || disableControls) return;
+    const delay = authFilesRetryDelayMs(authFilesFailureCount);
+    const timer = window.setTimeout(() => { void loadFiles(); }, delay);
+    return () => window.clearTimeout(timer);
+  }, [authFilesFailureCount, authFilesLoadFailed, disableControls, loadFiles]);
+
+  useEffect(() => {
+    if (!authFilesLoadFailed || disableControls) return;
+    const retryNow = () => { void loadFiles(); };
+    window.addEventListener('focus', retryNow);
+    window.addEventListener('online', retryNow);
+    return () => {
+      window.removeEventListener('focus', retryNow);
+      window.removeEventListener('online', retryNow);
+    };
+  }, [authFilesLoadFailed, disableControls, loadFiles]);
 
   /* ---------- 额度缓存 ----------
    * 排在归类/排序之前：「最快恢复优先」要读它算排序键。 */
@@ -249,7 +283,7 @@ export function QuotaPage() {
     const check = () => { void controller.check(); };
     const onVisible = () => { if (document.visibilityState === 'visible') check(); };
     // Polling checks readiness; provider requests run at most once per
-    // randomized 2–8 minute deadline (re-rolled after each refresh, see
+    // randomized 3–7 minute deadline (re-rolled after each refresh, see
     // quotaRefreshClock). Focus/online catch up immediately after suspension.
     const timer = window.setInterval(check, 15_000);
     window.addEventListener('focus', check);
@@ -349,6 +383,18 @@ export function QuotaPage() {
           </div>
         )}
 
+        {/* Quota windows first: the timeline is the comparison surface; the
+            card grid below stays the general per-credential meter listing. */}
+        <QuotaTimeline
+          entries={sortedEntries}
+          quotaFor={getQuota}
+          displayNameFor={displayNameFor}
+          resolvedTheme={resolvedTheme}
+          refreshing={loading || batchLoading}
+          disableControls={disableControls}
+          onRefreshAll={handleRefreshAll}
+        />
+
         {loading ? (
           <div className={styles.grid} aria-hidden="true">
             {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
@@ -420,16 +466,6 @@ export function QuotaPage() {
           </div>
         )}
 
-        {/* Compare every credential in the selected tool filter, independent of card pagination. */}
-        <QuotaTimeline
-          entries={sortedEntries}
-          quotaFor={getQuota}
-          displayNameFor={displayNameFor}
-          resolvedTheme={resolvedTheme}
-          refreshing={loading || batchLoading}
-          disableControls={disableControls}
-          onRefreshAll={handleRefreshAll}
-        />
       </section>
     </div>
   );
