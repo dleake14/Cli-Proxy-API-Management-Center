@@ -1,0 +1,19 @@
+{
+  "target": "http://localhost:5173/#/quota",
+  "checks": {
+    "sidebarCollapsed": true,
+    "appShellClass": "app-shell sidebar-is-collapsed ",
+    "hasTimeline": true,
+    "hasGrid": true,
+    "timelineTop": 203,
+    "gridTop": 894,
+    "timelineAboveGrid": true,
+    "heading": "Quota Management",
+    "viewport": {
+      "w": 936,
+      "h": 1826
+    }
+  },
+  "consoleErrorCount": 0,
+  "consoleErrors": []
+}

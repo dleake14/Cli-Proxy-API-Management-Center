@@ -1,0 +1,60 @@
+diff --git a/configs/usg2.json b/configs/usg2.json
+index 9da7ca8..0529912 100644
+--- a/configs/usg2.json
++++ b/configs/usg2.json
+@@ -89,9 +89,14 @@
+    "appWindow": true
+   },
+   {
+-   "id": "usg-ollama",
+-   "name": "Ollama Settings",
++   "id": "usg-meta",
++   "name": "Meta Usage",
+    "profile": "default",
++   "userDataDirectory": "C:\\CODE\\chrome-scut\\state\\usg2-meta-chrome",
++   "chromeExtraArgs": [
++    "--remote-debugging-port=19222",
++    "--remote-allow-origins=*"
++   ],
+    "position": {
+     "physicalX": 6610,
+     "physicalY": 0,
+@@ -112,8 +117,8 @@
+    },
+    "tabs": [
+     {
+-     "url": "https://ollama.com/settings",
+-     "title": "Ollama Settings",
++     "url": "https://dev.meta.ai/usage?team_id=1036909025929068&project_id=991332810605167",
++     "title": "Meta Usage",
+      "id": "tab-0"
+     }
+    ],
+@@ -151,14 +156,9 @@
+    "appWindow": true
+   },
+   {
+-   "id": "usg-meta",
+-   "name": "Meta Usage",
++   "id": "usg-ollama",
++   "name": "Ollama Settings",
+    "profile": "default",
+-   "userDataDirectory": "C:\\CODE\\chrome-scut\\state\\usg2-meta-chrome",
+-   "chromeExtraArgs": [
+-    "--remote-debugging-port=19222",
+-    "--remote-allow-origins=*"
+-   ],
+    "position": {
+     "physicalX": 6079,
+     "physicalY": 0,
+@@ -179,8 +179,8 @@
+    },
+    "tabs": [
+     {
+-     "url": "https://dev.meta.ai/usage/?project_id=1067044942670760&team_id=1036909025929068",
+-     "title": "Meta Usage",
++     "url": "https://ollama.com/settings",
++     "title": "Ollama Settings",
+      "id": "tab-0"
+     }
+    ],

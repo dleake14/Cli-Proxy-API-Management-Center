@@ -51,6 +51,7 @@ import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
 import { isSupportedLanguage } from '@/utils/language';
 import { getSidebarShortcutLabel, isSidebarToggleShortcut } from '@/utils/sidebarShortcut';
+import { readSidebarCollapsedDefault, writeShellUiState } from './shellUiState';
 import type { Theme } from '@/types';
 
 const sidebarIcons: Record<string, ReactNode> = {
@@ -325,8 +326,10 @@ export function MainLayout() {
   const language = useLanguageStore((state) => state.language);
   const setLanguage = useLanguageStore((state) => state.setLanguage);
 
+  // Rail collapse is a shell preference: the CPAMC app window opens collapsed
+  // (fixed width on the secondary display) and remembers a session toggle.
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsedDefault);
   const [authFilesCount, setAuthFilesCount] = useState<number | null>(null);
   const [railTooltip, setRailTooltip] = useState<{
     targetID: string;
@@ -825,18 +828,26 @@ export function MainLayout() {
 
   const shortcutText = getSidebarShortcutLabel(isMac);
 
+  const toggleSidebarCollapsed = useCallback(() => {
+    hideRailTooltip();
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      writeShellUiState({ sidebarCollapsed: next });
+      return next;
+    });
+  }, [hideRailTooltip]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isSidebarToggleShortcut(event)) {
         event.preventDefault();
-        hideRailTooltip();
-        setSidebarCollapsed((prev) => !prev);
+        toggleSidebarCollapsed();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hideRailTooltip]);
+  }, [toggleSidebarCollapsed]);
 
   const renderNavBadge = (badge?: number, badgeLabel?: string) =>
     typeof badge === 'number' ? (
@@ -982,10 +993,7 @@ export function MainLayout() {
         <button
           type="button"
           className="sidebar-toggle-floating"
-          onClick={() => {
-            hideRailTooltip();
-            setSidebarCollapsed((prev) => !prev);
-          }}
+          onClick={toggleSidebarCollapsed}
           onMouseEnter={(event) =>
             handleRailTooltipMouseEnter(event, 'sidebar-toggle', sidebarToggleLabel, shortcutText)
           }

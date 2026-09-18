@@ -1,0 +1,99 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "zoom on the CPAMC quota window is functional in the served fork bundle",
+      "zooming out extends into the future instead of scrolling back over past days",
+      "every subscription window shows its next run in a faded weight",
+      "Claude shows two subscription windows (current plus next), not one",
+      "future windows stay visible without horizontal scrolling",
+      "next window is derived from the current provider reset and period",
+      "weekly subscriptions and the 30-day Cursor subscription both project their next run"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "src/features/quota/components/QuotaTimeline.module.scss",
+    "tests/quotaTimeline.test.ts",
+    "tests/quotaTimelineRendering.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "proof/render-check.tsx",
+      "proof/render-check.out.txt",
+      "proof/deploy.txt",
+      "proof/served-management.html"
+    ]
+  },
+  "rollback": {
+    "command": "cp artifacts/cpamc/quota-next-window-zoom-20260914/management.html.before-20260914 /home/david/cli-proxy-api/static/management.html && git apply -R artifacts/cpamc/quota-next-window-zoom-20260914/diff.patch",
+    "baseline_ref": "e8ee07c on main plus management.html.before-20260914 and the pre-change served bundle copy"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/components/QuotaTimeline.tsx",
+      "src/features/quota/quotaTimelineModel.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/components/QuotaTimeline.module.scss",
+        "contains": "opacity: 0.55;"
+      },
+      {
+        "path": "tests/quotaTimelineRendering.test.ts",
+        "contains": "next subscription run"
+      },
+      {
+        "path": "src/features/quota/components/QuotaTimeline.tsx",
+        "contains": "zoomCurrentSpan"
+      },
+      {
+        "path": "src/features/quota/components/QuotaTimeline.tsx",
+        "contains": "cells.length * (mode === 'session' ? 18 : 26)"
+      },
+      {
+        "path": "src/features/quota/quotaTimelineModel.ts",
+        "contains": "Pinning the left edge"
+      }
+    ],
+    "forbidden_text": []
+  },
+  "sources": [
+    "validation.log",
+    "proof/deploy.txt",
+    "proof/render-check.out.txt",
+    "proof/served-management.html"
+  ],
+  "verification": {
+    "tests_passed": 503,
+    "tests_failed": 0,
+    "focused_passed": 56,
+    "lint_exit_code": 0,
+    "build_exit_code": 0,
+    "served_bundle_before_timeline_zoom_matches": 0,
+    "served_bundle_after_timeline_zoom_matches": 2,
+    "zoom_span_start_pinned_to": "2026-09-14 (today) at 3, 7, 15 and 30 days",
+    "future_windows_claude_by_zoom": "1, 1, 2, 4",
+    "future_windows_codex_by_zoom": "0, 1, 2, 4",
+    "allocation": "lead only; no worker invoked"
+  },
+  "proof": {
+    "route": "served management panel http://127.0.0.1:8317/management.html and an isolated QuotaTimeline render fixture",
+    "console_error_count": 0,
+    "zoom_days": [
+      3,
+      7,
+      15,
+      30
+    ],
+    "limitation": "No authenticated browser session was used; the served bundle was verified byte-for-byte against the fork dist, and the timeline was rendered from source at each zoom day count."
+  }
+}

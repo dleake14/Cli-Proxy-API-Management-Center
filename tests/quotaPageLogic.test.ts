@@ -42,6 +42,8 @@ describe('classifyQuotaFiles', () => {
       'claude',
       'xai',
       'antigravity',
+      'kimi',
+      'ollama',
       'cursor',
       'muse',
     ]);
@@ -51,8 +53,8 @@ describe('classifyQuotaFiles', () => {
     const entries = classifyQuotaFiles(FILES);
     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
-    // Operator-facing providers plus runtime Cursor/Muse cards.
-    expect(entries).toHaveLength(6);
+    // Configured providers plus runtime Ollama/Cursor/Muse cards.
+    expect(entries).toHaveLength(8);
   });
 
   test('orders entries by provider tab order', () => {
@@ -62,6 +64,8 @@ describe('classifyQuotaFiles', () => {
       'codex',
       'claude',
       'xai',
+      'kimi',
+      'ollama',
       'cursor',
       'muse',
     ]);
@@ -69,20 +73,25 @@ describe('classifyQuotaFiles', () => {
 });
 
 describe('classifyQuotaFiles — visible provider boundary', () => {
-  test('excludes Ollama and Kimi from the visible quota surface', () => {
+  test('shows configured Kimi and exactly one runtime-only Ollama card', () => {
     const entries = classifyQuotaFiles([...FILES, file('ollama-key.json', 'ollama')]);
-    expect(entries.map((entry) => entry.type)).not.toContain('ollama');
-    expect(entries.map((entry) => entry.type)).not.toContain('kimi');
+    expect(entries.map((entry) => entry.type)).toContain('kimi');
+    expect(entries.filter((entry) => entry.type === 'ollama')).toHaveLength(1);
+    expect(entries.find((entry) => entry.type === 'ollama')?.file.name).toBe(
+      'ollama-key.json'
+    );
   });
 });
 
 describe('buildTabCounts', () => {
   test('counts per provider plus an all total, zero-filling empty tabs', () => {
     expect(buildTabCounts(classifyQuotaFiles(FILES))).toEqual({
-      all: 6,
+      all: 8,
       claude: 1,
       antigravity: 0,
       codex: 2,
+      kimi: 1,
+      ollama: 1,
       xai: 1,
       cursor: 1,
       muse: 1,
@@ -94,7 +103,7 @@ describe('filterEntriesByTab', () => {
   const entries = classifyQuotaFiles(FILES);
 
   test("passes everything through on the 'all' tab", () => {
-    expect(filterEntriesByTab(entries, 'all')).toHaveLength(6);
+    expect(filterEntriesByTab(entries, 'all')).toHaveLength(8);
   });
 
   test('filters to a single provider', () => {
@@ -171,6 +180,8 @@ describe('sortQuotaEntries', () => {
       'claude-a.json',
       'codex-a.json',
       'codex-b.json',
+      'kimi-a.json',
+      'Ollama Cloud',
       'Cursor Ultra',
       'Muse High Usage',
     ]);
@@ -189,6 +200,8 @@ describe('sortQuotaEntries', () => {
       'codex-a.json',
       'claude-a.json',
       'grok-a.json',
+      'kimi-a.json',
+      'Ollama Cloud',
       'Cursor Ultra',
       'Muse High Usage',
     ]);

@@ -1,0 +1,14 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "Meta Muse Spark CPAMC quota integration",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": ["validation.log", "diff.patch", "proof/meta-spark-card.html", "proof/browser-console.log"]
+  },
+  "scope": {"must_cover": ["Meta Muse Spark", "runtime-only", "server", "request", "token", "Bun", "rollback"]},
+  "floors": {"min_words": 80, "min_words_per_covered_term": 1},
+  "forbidden_tokens": ["TODO", "Lorem ipsum", "META_API_KEY=", "LLM_1168"]
+}

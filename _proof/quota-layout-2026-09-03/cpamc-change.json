@@ -1,0 +1,82 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "Gemini/Antigravity hides the Claude and GPT quota group",
+      "Codex hides the 5.3 Spark and Spark Weekly quota windows",
+      "Grok/xAI hides Imagine product usage and Monthly credits",
+      "Quota provider order is Codex, Claude, Grok/xAI, Gemini/Antigravity, Ollama",
+      "Kimi remains available after the explicitly ordered providers",
+      "Deterministic rendered-body and provider-order regression tests",
+      "Bun test, lint, TypeScript, build, and whitespace validation",
+      "Rollback preserves pre-existing worktree changes"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx",
+    "src/features/quota/providers/codex/CodexQuotaBody.tsx",
+    "src/features/quota/providers/xai/XaiQuotaBody.tsx",
+    "src/features/quota/constants.ts",
+    "tests/quotaBodyRendering.test.ts",
+    "tests/quotaPageLogic.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "../quota-management-layout.html",
+      "../quota-management-browser-console.log"
+    ]
+  },
+  "proof": {
+    "method": "Static React DOM render from the three modified quota bodies",
+    "browser": "Browser-control relay unavailable in WSL session",
+    "route": "Quota management provider-card body proof",
+    "viewport": "Not applicable to static DOM proof",
+    "console_error_count": "not captured",
+    "dom_assertions": "Spark, Claude and GPT, Imagine, and Monthly credits labels absent; requested visible labels present"
+  },
+  "rollback": {
+    "command": "Review _proof/quota-layout-2026-09-03/diff.patch and reverse only the six quota-layout hunks, preserving unrelated pre-existing worktree changes.",
+    "baseline_ref": "pre-edit worktree status recorded 2026-09-03; no commit created"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx",
+      "src/features/quota/providers/codex/CodexQuotaBody.tsx",
+      "src/features/quota/providers/xai/XaiQuotaBody.tsx",
+      "src/features/quota/constants.ts",
+      "tests/quotaBodyRendering.test.ts",
+      "tests/quotaPageLogic.test.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx",
+        "contains": "isHiddenAntigravityGroup"
+      },
+      {
+        "path": "src/features/quota/providers/codex/CodexQuotaBody.tsx",
+        "contains": "isHiddenCodexWindow"
+      },
+      {
+        "path": "src/features/quota/providers/xai/XaiQuotaBody.tsx",
+        "contains": "isHiddenXaiProductUsage"
+      },
+      {
+        "path": "src/features/quota/constants.ts",
+        "contains": "'codex'"
+      }
+    ],
+    "forbidden_text": [
+      {
+        "path": "src/features/quota/providers/xai/XaiQuotaBody.tsx",
+        "contains": "OLLAMA_API_KEY="
+      }
+    ]
+  }
+}

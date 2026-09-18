@@ -1,0 +1,5 @@
+[36mvite v8.1.4 [32mbuilding client environment for production...[36m[39m
+[plugin vite:singlefile] Inlining: index-B-IiK_nu.js
+[plugin vite:singlefile] Inlining: style-Bo6dfZF-.css
+computing gzip size...
+[32m✓ built in 1.85s[39m

@@ -1,0 +1,23 @@
+{
+  "route": "http://localhost:5173/#/quota",
+  "summary": {
+    "href": "http://localhost:5173/#/quota",
+    "title": "CLI Proxy API Management Center",
+    "heading": "Quota Management",
+    "bodyHasQuota": true,
+    "bodyHasTimeline": true,
+    "authStatePresent": true,
+    "loginAction": {
+      "clicked": true,
+      "detectedBackend": true
+    },
+    "quotaStatus": {
+      "total": 7,
+      "loaded": 7,
+      "attention": 0
+    }
+  },
+  "console_error_count": 0,
+  "request_failure_count": 0,
+  "screenshot": "cpamc-quota.png"
+}

@@ -1,0 +1,111 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "Quota management cards expose refresh quota only",
+      "Codex reset quota button is absent from the quota management page",
+      "Reset support outside the quota management page remains unchanged",
+      "Deterministic quota-card action regression test",
+      "Bun test, lint, TypeScript, build, and whitespace validation",
+      "Rollback preserves pre-existing worktree changes"
+    ]
+  },
+  "baseline": {
+    "branch": "main",
+    "remote": "origin -> upstream CPAMC repository",
+    "preexisting_modified_files": [
+      "src/features/authFiles/components/AuthFileQuotaSection.tsx",
+      "src/features/authFiles/constants.ts",
+      "src/features/quota/QuotaPage.tsx",
+      "src/features/quota/logic.ts",
+      "src/features/quota/providers/index.ts",
+      "src/features/quota/providers/types.ts",
+      "src/features/quota/quotaTimelineModel.ts",
+      "src/features/quota/resetSchedule.ts",
+      "src/i18n/locales/en.json",
+      "src/i18n/locales/ru.json",
+      "src/i18n/locales/zh-CN.json",
+      "src/i18n/locales/zh-TW.json",
+      "src/stores/useQuotaStore.ts",
+      "src/types/authFile.ts",
+      "src/types/quota.ts",
+      "src/utils/quota/constants.ts",
+      "src/utils/quota/validators.ts"
+    ],
+    "preexisting_untracked_paths": [
+      "_proof/",
+      "src/assets/icons/ollama.svg",
+      "src/features/quota/providers/ollama/",
+      "tests/ollamaQuota.test.ts",
+      "tools/"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/QuotaPage.tsx",
+    "src/features/quota/components/QuotaCard.tsx",
+    "src/features/quota/logic.ts",
+    "tests/quotaCardActions.test.ts",
+    "tests/quotaPageLogic.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "proof/quota-management-actions.html",
+      "proof/browser-console.log"
+    ]
+  },
+  "deployment": {
+    "target": "/home/david/cli-proxy-api/static/management.html",
+    "backup": "/home/david/cli-proxy-api/static/management.html.backup-20260904-quota-reset-button",
+    "verified_sha256": "616ea042272a585ad4db31e3c3a8cfe57734395d28475143fd3fed45f8c118c6",
+    "served_url": "http://127.0.0.1:8317/management.html",
+    "served_matches_verified_build": true
+  },
+  "proof": {
+    "method": "Static source-backed quota management action proof",
+    "browser": "Not required; deterministic DOM contract proof",
+    "route": "Quota management",
+    "viewport": "Not applicable to static DOM proof",
+    "console_error_count": "not captured; browser relay unavailable in WSL",
+    "dom_assertions": "Quota management exposes Refresh quota actions and no Reset quota action"
+  },
+  "rollback": {
+    "command": "Reverse only the quota-management action hunks recorded in diff.patch; preserve the pre-existing WIP files listed by git status.",
+    "baseline_ref": "pre-edit worktree status recorded 2026-09-04; no commit created; unrelated WIP preserved"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/QuotaPage.tsx",
+      "src/features/quota/components/QuotaCard.tsx",
+      "src/features/quota/logic.ts",
+      "tests/quotaCardActions.test.ts",
+      "tests/quotaPageLogic.test.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/components/QuotaCard.tsx",
+        "contains": "auth_files.quota_refresh_single"
+      },
+      {
+        "path": "src/features/quota/QuotaPage.tsx",
+        "contains": "onRefresh={() => void refreshQuota"
+      }
+    ],
+    "forbidden_text": [
+      {
+        "path": "src/features/quota/components/QuotaCard.tsx",
+        "contains": "codex_quota.reset_button"
+      },
+      {
+        "path": "src/features/quota/QuotaPage.tsx",
+        "contains": "onReset="
+      }
+    ]
+  }
+}

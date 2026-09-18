@@ -12,7 +12,7 @@
  * quotaTimeline.ts.)
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconRefreshCw } from '@/components/ui/icons';
@@ -27,8 +27,10 @@ import {
   projectResetCredits,
   scheduledRemainingAt,
   currentWindowSpan,
+  extendSpanToCoverNextWindows,
   addCalendarDays,
   timelineSpanZoomed,
+  zoomSpanAtAnchor,
   zoomCurrentSpan,
   visibleUsedPercent,
   TIMELINE_ZOOM_BOUNDS,
@@ -40,6 +42,7 @@ import styles from './QuotaTimeline.module.scss';
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const TIMELINE_TIME_ZONE = 'America/Chicago';
+const TIMELINE_LANE_WIDTH_PX = 210;
 const EN_WEEKDAY_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -89,6 +92,45 @@ const formatTime = (ms: number) => {
 };
 const weekdayIndex = (ms: number) => EN_WEEKDAY_INDEX[centralParts(ms).weekday] ?? 0;
 
+type TimelineSpan = { startMs: number; endMs: number; days: number };
+type TimelineViewportAnchor = { atMs: number; position: number };
+
+const clamp = (value: number, minimum: number, maximum: number) =>
+  Math.min(maximum, Math.max(minimum, value));
+
+function captureViewportAnchor(
+  chart: HTMLDivElement | null,
+  span: TimelineSpan
+): TimelineViewportAnchor {
+  if (!chart) {
+    const position = 0.5;
+    return { atMs: span.startMs + (span.endMs - span.startMs) * position, position };
+  }
+
+  const calendarWidth = Math.max(1, chart.scrollWidth - TIMELINE_LANE_WIDTH_PX);
+  const visibleStart = chart.scrollLeft + Math.min(TIMELINE_LANE_WIDTH_PX, chart.clientWidth);
+  const visibleEnd = chart.scrollLeft + chart.clientWidth;
+  const position = clamp(
+    ((visibleStart + visibleEnd) / 2 - TIMELINE_LANE_WIDTH_PX) / calendarWidth,
+    0,
+    1
+  );
+  // Keep the date under the visual center, rather than reusing its old span
+  // fraction. A tight zoom may no longer have enough horizontal overflow to
+  // restore that fraction; centering the captured date still works at every
+  // zoom level and through a viewport resize.
+  return { atMs: span.startMs + (span.endMs - span.startMs) * position, position: 0.5 };
+}
+
+function scrollTimelineBy(
+  chart: HTMLDivElement | null,
+  distance: number,
+  behavior: ScrollBehavior = 'auto'
+) {
+  if (!chart || !Number.isFinite(distance) || distance === 0) return;
+  chart.scrollBy({ left: distance, behavior });
+}
+
 export interface QuotaTimelineProps {
   entries: QuotaFileEntry[];
   /**
@@ -137,6 +179,14 @@ export function QuotaTimeline({
   const [zoomDays, setZoomDays] = useState(
     initialZoomDays ?? TIMELINE_ZOOM_BOUNDS[initialMode].default
   );
+  const [zoomAnchor, setZoomAnchor] = useState<TimelineViewportAnchor | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const pendingViewportAnchor = useRef<TimelineViewportAnchor | null>(null);
+  const visibleViewportAnchor = useRef<TimelineViewportAnchor | null>(null);
+  const resizeViewportAnchor = useRef<TimelineViewportAnchor | null>(null);
+  const preserveZoomAnchor = useRef(false);
+  const restoringScroll = useRef(false);
+  const restoredScrollLeft = useRef<number | null>(null);
   const zoomBounds = TIMELINE_ZOOM_BOUNDS[mode];
 
   // The clock has to advance on its own: bars are classified past/live/next
@@ -151,6 +201,21 @@ export function QuotaTimeline({
     [mode, offset, now, zoomDays]
   );
   const todayLabel = t('quota_management.windows_today', { defaultValue: 'Today' });
+  const scrollGroupLabel = t('quota_management.windows_scroll_group', {
+    defaultValue: 'Timeline scrolling',
+  });
+  const scrollHint = t('quota_management.windows_scroll_hint', {
+    defaultValue: 'Shift + mouse wheel scrolls sideways',
+  });
+  const scrollLeftLabel = t('quota_management.windows_scroll_left', {
+    defaultValue: 'Scroll timeline left',
+  });
+  const scrollRightLabel = t('quota_management.windows_scroll_right', {
+    defaultValue: 'Scroll timeline right',
+  });
+  const chartLabel = t('quota_management.windows_timeline_label', {
+    defaultValue: 'Quota window timeline',
+  });
   // This button doubles as the selected-period indicator and the shortcut back
   // to the current period. Keeping its visible text hard-coded to "Today" made
   // successful previous/next navigation look as though the date never changed.
@@ -192,14 +257,26 @@ export function QuotaTimeline({
     [laneInputs, mode, now]
   );
 
-  const span = useMemo(
-    () => {
-      if (offset !== 0) return baseSpan;
-      const current = currentWindowSpan(lanes, now, TIMELINE_ZOOM_BOUNDS[mode].default);
-      return fitCurrent ? current : zoomCurrentSpan(current, now, mode, zoomDays);
-    },
-    [fitCurrent, offset, lanes, now, mode, baseSpan, zoomDays]
-  );
+  const span = useMemo(() => {
+    // A selected previous/next period still needs the same scroll-aware zoom
+    // behavior. Without this branch, dragging the slider after navigating
+    // would rebuild from that period's left edge and lose the viewed date.
+    if (offset !== 0) {
+      if (!zoomAnchor) return baseSpan;
+      return zoomSpanAtAnchor(baseSpan, zoomAnchor.atMs, zoomAnchor.position, mode, zoomDays);
+    }
+    const current = currentWindowSpan(lanes, now, TIMELINE_ZOOM_BOUNDS[mode].default);
+    // The default fit view must show what's coming: push its end out to the
+    // full next window of every lane that can reasonably fit (capped so a
+    // 30-day subscription cannot balloon a fortnight into a six-week view).
+    // An explicit zoom or pan choice is honored exactly as chosen — the
+    // slider must keep meaning what it says.
+    if (!fitCurrent) {
+      if (!zoomAnchor) return zoomCurrentSpan(current, now, mode, zoomDays);
+      return zoomSpanAtAnchor(current, zoomAnchor.atMs, zoomAnchor.position, mode, zoomDays);
+    }
+    return extendSpanToCoverNextWindows(current, lanes, now, 14);
+  }, [fitCurrent, offset, lanes, now, mode, baseSpan, zoomAnchor, zoomDays]);
   const displayedZoom = fitCurrent && offset === 0 ? span.days : zoomDays;
 
   /** Weekly: one cell per day. Session: one per 6 hours. */
@@ -212,15 +289,17 @@ export function QuotaTimeline({
       const day = Math.floor(index / (zoomed ? 4 : 1));
       const dayStart = addCalendarDays(span.startMs, day);
       const dayEnd = addCalendarDays(span.startMs, day + 1);
-      const at = dayStart + (zoomed ? (index % 4) * (dayEnd - dayStart) / 4 : 0);
+      const at = dayStart + (zoomed ? ((index % 4) * (dayEnd - dayStart)) / 4 : 0);
       const date = centralParts(at);
       const isDayStart = !zoomed || date.hour === '00';
       const dayIndex = weekdayIndex(at);
       return {
         at,
-        widthPercent: ((dayEnd - dayStart) / (zoomed ? 4 : 1)) /
-          (span.endMs - span.startMs) * 100,
+        widthPercent: ((dayEnd - dayStart) / (zoomed ? 4 : 1) / (span.endMs - span.startMs)) * 100,
         isDayStart,
+        // Dense spans drop every other date so the labels never collide once the
+        // chart is packed into the panel width instead of scrolling sideways.
+        showLabel: isDayStart && (zoomed || span.days <= 18 || day % 2 === 0),
         isToday: formatDay(at) === todayKey,
         isWeekend: dayIndex === 0 || dayIndex === 6,
         weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[dayIndex]}`, {
@@ -237,10 +316,168 @@ export function QuotaTimeline({
       ? ((now - span.startMs) / (span.endMs - span.startMs)) * 100
       : null;
 
+  // The calendar gets a new width after zooming. Restore the captured date to
+  // the center of the visible calendar (beside the sticky credential column)
+  // after React has committed that new width.
+  useEffect(() => {
+    const anchor = pendingViewportAnchor.current ?? visibleViewportAnchor.current;
+    const chart = chartRef.current;
+    if (!anchor || !chart) return;
+
+    const calendarWidth = Math.max(1, chart.scrollWidth - TIMELINE_LANE_WIDTH_PX);
+    // zoomSpanAtAnchor aligns the new span to midnight. Its requested 50%
+    // position can therefore differ by hours from the anchor's actual instant;
+    // restore from that actual instant so the date under the viewport survives
+    // a round-trip exactly instead of drifting with each calendar rounding.
+    const actualPosition = clamp(
+      (anchor.atMs - span.startMs) / (span.endMs - span.startMs),
+      0,
+      1
+    );
+    const contentX = TIMELINE_LANE_WIDTH_PX + calendarWidth * actualPosition;
+    const viewportCalendarCenter =
+      (Math.min(TIMELINE_LANE_WIDTH_PX, chart.clientWidth) + chart.clientWidth) / 2;
+    restoringScroll.current = true;
+    const nextScrollLeft = clamp(
+      contentX - viewportCalendarCenter,
+      0,
+      Math.max(0, chart.scrollWidth - chart.clientWidth)
+    );
+    restoredScrollLeft.current = nextScrollLeft;
+    chart.scrollLeft = nextScrollLeft;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoringScroll.current = false;
+      });
+    });
+    pendingViewportAnchor.current = null;
+  }, [lanes.length, span.startMs, span.endMs]);
+
+  // Browser zoom and responsive breakpoints change the calendar width without
+  // changing the selected dates. Reapply the most recently viewed instant once
+  // the new layout has settled, so a narrower or recovered viewport does not
+  // make the timeline appear to jump to another day.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || typeof ResizeObserver === 'undefined') return;
+    let frame = 0;
+    const rememberBeforeResize = () => {
+      // A browser may emit a scroll event while recomputing the narrower
+      // layout. Preserve the instant from before that layout scroll instead
+      // of treating the browser's temporary clamp as an intentional pan.
+      resizeViewportAnchor.current = zoomAnchor ?? visibleViewportAnchor.current;
+      restoringScroll.current = true;
+    };
+    const restoreAfterResize = () => {
+      const anchor = resizeViewportAnchor.current ?? zoomAnchor ?? visibleViewportAnchor.current;
+      if (!anchor) return;
+      const calendarWidth = Math.max(1, chart.scrollWidth - TIMELINE_LANE_WIDTH_PX);
+      const actualPosition = clamp(
+        (anchor.atMs - span.startMs) / (span.endMs - span.startMs),
+        0,
+        1
+      );
+      const contentX = TIMELINE_LANE_WIDTH_PX + calendarWidth * actualPosition;
+      const viewportCalendarCenter =
+        (Math.min(TIMELINE_LANE_WIDTH_PX, chart.clientWidth) + chart.clientWidth) / 2;
+      restoringScroll.current = true;
+      const nextScrollLeft = clamp(
+        contentX - viewportCalendarCenter,
+        0,
+        Math.max(0, chart.scrollWidth - chart.clientWidth)
+      );
+      restoredScrollLeft.current = nextScrollLeft;
+      chart.scrollLeft = nextScrollLeft;
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => {
+          restoringScroll.current = false;
+          resizeViewportAnchor.current = null;
+        });
+      });
+    };
+    const scheduleRestore = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(restoreAfterResize);
+    };
+    const observer = new ResizeObserver(scheduleRestore);
+    observer.observe(chart);
+    window.addEventListener('resize', rememberBeforeResize);
+    window.addEventListener('resize', scheduleRestore);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', rememberBeforeResize);
+      window.removeEventListener('resize', scheduleRestore);
+      cancelAnimationFrame(frame);
+    };
+  }, [lanes.length, span.startMs, span.endMs, zoomAnchor]);
+
+  const handleZoomChange = (days: number) => {
+    const anchor =
+      preserveZoomAnchor.current && zoomAnchor
+        ? zoomAnchor
+        : captureViewportAnchor(chartRef.current, span);
+    pendingViewportAnchor.current = anchor;
+    visibleViewportAnchor.current = anchor;
+    preserveZoomAnchor.current = true;
+    setZoomAnchor(anchor);
+    setFitCurrent(false);
+    setZoomDays(days);
+  };
+
+  const resetTimelinePosition = () => {
+    pendingViewportAnchor.current = null;
+    visibleViewportAnchor.current = null;
+    preserveZoomAnchor.current = false;
+    setZoomAnchor(null);
+    if (chartRef.current) chartRef.current.scrollLeft = 0;
+  };
+
+  // React registers wheel listeners as passive. Shift-wheel needs to suppress
+  // the page's vertical scroll, so use a native non-passive listener instead.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.shiftKey) return;
+      const distance = event.deltaY || event.deltaX;
+      if (!distance) return;
+      event.preventDefault();
+      preserveZoomAnchor.current = false;
+      scrollTimelineBy(chart, distance, 'auto');
+    };
+    const rememberViewport = () => {
+      if (restoringScroll.current) return;
+      // Browser layout can clamp a programmatically restored position by a few
+      // pixels while a responsive width changes. Do not turn that clamp into a
+      // user pan, or the next resize would preserve the wrong date.
+      if (
+        restoredScrollLeft.current !== null &&
+        Math.abs(chart.scrollLeft - restoredScrollLeft.current) <= 12
+      ) {
+        return;
+      }
+      restoredScrollLeft.current = null;
+      const anchor = captureViewportAnchor(chart, span);
+      visibleViewportAnchor.current = anchor;
+      setZoomAnchor(anchor);
+      preserveZoomAnchor.current = false;
+    };
+    chart.addEventListener('wheel', handleWheel, { passive: false });
+    chart.addEventListener('scroll', rememberViewport, { passive: true });
+    return () => {
+      chart.removeEventListener('wheel', handleWheel);
+      chart.removeEventListener('scroll', rememberViewport);
+    };
+  });
+
   if (!hasAnyLane) return null;
 
   return (
-    <section className={styles.timeline} data-span-start-ms={span.startMs} data-span-end-ms={span.endMs}>
+    <section
+      className={styles.timeline}
+      data-span-start-ms={span.startMs}
+      data-span-end-ms={span.endMs}
+    >
       <header className={styles.head}>
         <div>
           <h2 className={styles.title}>
@@ -254,7 +491,10 @@ export function QuotaTimeline({
                   defaultValue: '{{count}} days',
                   count: span.days,
                 })
-              : t('quota_management.windows_span_session_days', { defaultValue: '{{count}} days', count: span.days })}
+              : t('quota_management.windows_span_session_days', {
+                  defaultValue: '{{count}} days',
+                  count: span.days,
+                })}
             {' · America/Chicago'}
             {offset === 0 &&
               ` · ${t('quota_management.windows_current', { defaultValue: 'current' })}`}
@@ -265,14 +505,21 @@ export function QuotaTimeline({
           <div className={styles.nav}>
             <button
               type="button"
-              onClick={() => setOffset((value) => value - 1)}
+              onClick={() => {
+                resetTimelinePosition();
+                setOffset((value) => value - 1);
+              }}
               aria-label={t('quota_management.windows_prev', { defaultValue: 'Previous' })}
             >
               ‹
             </button>
             <button
               type="button"
-              onClick={() => { setOffset(0); setFitCurrent(true); }}
+              onClick={() => {
+                resetTimelinePosition();
+                setOffset(0);
+                setFitCurrent(true);
+              }}
               disabled={offset === 0 && fitCurrent}
               aria-label={todayLabel}
               title={offset === 0 ? undefined : todayLabel}
@@ -281,7 +528,10 @@ export function QuotaTimeline({
             </button>
             <button
               type="button"
-              onClick={() => setOffset((value) => value + 1)}
+              onClick={() => {
+                resetTimelinePosition();
+                setOffset((value) => value + 1);
+              }}
               aria-label={t('quota_management.windows_next', { defaultValue: 'Next' })}
             >
               ›
@@ -295,6 +545,7 @@ export function QuotaTimeline({
                 type="button"
                 aria-pressed={mode === value}
                 onClick={() => {
+                  resetTimelinePosition();
                   setMode(value);
                   setOffset(0); // spans differ in size; an old offset means nothing
                   setFitCurrent(true);
@@ -323,7 +574,52 @@ export function QuotaTimeline({
         </div>
       </header>
 
-      <div className={styles.chart} style={{ '--timeline-min-width': `${210 + cells.length * 44}px` } as CSSProperties}>
+      <div className={styles.scrollControls} role="group" aria-label={scrollGroupLabel}>
+        <span className={styles.scrollHint}>{scrollHint}</span>
+        <button
+          type="button"
+          onClick={() =>
+            (() => {
+              preserveZoomAnchor.current = false;
+              scrollTimelineBy(
+                chartRef.current,
+                -Math.max(160, chartRef.current?.clientWidth ?? 0) * 0.7
+              );
+            })()
+          }
+          aria-label={scrollLeftLabel}
+          title={scrollLeftLabel}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            (() => {
+              preserveZoomAnchor.current = false;
+              scrollTimelineBy(
+                chartRef.current,
+                Math.max(160, chartRef.current?.clientWidth ?? 0) * 0.7
+              );
+            })()
+          }
+          aria-label={scrollRightLabel}
+          title={scrollRightLabel}
+        >
+          ›
+        </button>
+      </div>
+
+      <div
+        ref={chartRef}
+        className={styles.chart}
+        style={
+          {
+            '--timeline-min-width': `${TIMELINE_LANE_WIDTH_PX + cells.length * (mode === 'session' ? 18 : 44)}px`,
+          } as CSSProperties
+        }
+        aria-label={chartLabel}
+      >
         {lanes.length === 0 ? (
           <div className={styles.empty} role="status">
             {t('quota_management.windows_empty_session', {
@@ -346,10 +642,8 @@ export function QuotaTimeline({
                     data-daystart={cell.isDayStart ? 1 : 0}
                     style={{ flex: `0 0 ${cell.widthPercent}%` }}
                   >
-                    <span className={styles.axisWeekday}>
-                      {cell.isDayStart ? cell.weekday : ''}
-                    </span>
-                    <span className={styles.axisDate}>{cell.label}</span>
+                    <span className={styles.axisWeekday}>{cell.showLabel ? cell.weekday : ''}</span>
+                    <span className={styles.axisDate}>{cell.showLabel ? cell.label : ''}</span>
                   </div>
                 ))}
               </div>
@@ -383,7 +677,7 @@ export function QuotaTimeline({
             max={Math.max(zoomBounds.max, displayedZoom)}
             step={1}
             value={displayedZoom}
-            onChange={(event) => { setFitCurrent(false); setZoomDays(Number(event.target.value)); }}
+            onChange={(event) => handleZoomChange(Number(event.target.value))}
             aria-label={t('quota_management.windows_zoom_slider', {
               defaultValue: 'Timeline zoom',
             })}
@@ -454,7 +748,13 @@ interface LaneProps {
   span: { startMs: number; endMs: number; days: number };
   now: number;
   mode: TimelineMode;
-  cells: { at: number; isWeekend: boolean; isDayStart: boolean; widthPercent: number }[];
+  cells: {
+    at: number;
+    isWeekend: boolean;
+    isDayStart: boolean;
+    showLabel: boolean;
+    widthPercent: number;
+  }[];
   nowPercent: number | null;
   resolvedTheme: ResolvedTheme;
 }
@@ -488,8 +788,11 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
       scheduled,
       paceText: t('quota_management.windows_now_pace', {
         defaultValue: '{{label}} on-pace: {{percent}}% remaining',
-        label: '', percent: scheduled,
-      }).trim().split(`${scheduled}%`),
+        label: '',
+        percent: scheduled,
+      })
+        .trim()
+        .split(`${scheduled}%`),
       topPercent: ((index + 0.5) / bars.length) * 100,
     }));
   }, [liveWindow, lane.displayName, lane.name, now, nowPercent, stackedBars, t]);
@@ -556,8 +859,13 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
           </div>
         )}
         {liveWindow && (
-          <div className={styles.nextReset} data-window-start-ms={liveWindow.startMs} data-window-end-ms={liveWindow.endMs}>
-            {formatDay(liveWindow.startMs)} {formatTime(liveWindow.startMs)} → {formatDay(liveWindow.endMs)} {formatTime(liveWindow.endMs)}
+          <div
+            className={styles.nextReset}
+            data-window-start-ms={liveWindow.startMs}
+            data-window-end-ms={liveWindow.endMs}
+          >
+            {formatDay(liveWindow.startMs)} {formatTime(liveWindow.startMs)} →{' '}
+            {formatDay(liveWindow.endMs)} {formatTime(liveWindow.endMs)}
           </div>
         )}
         {lane.limits.length > 0 && (
@@ -618,7 +926,11 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                 ? formatTime(window.endMs)
                 : `${formatDay(window.endMs)} ${formatTime(window.endMs)}`;
 
-            if (stackedBars.length > 0 && window.state === 'live' && window.endMs === lane.anchorMs) {
+            if (
+              stackedBars.length > 0 &&
+              window.state === 'live' &&
+              window.endMs === lane.anchorMs
+            ) {
               return (
                 <div
                   key={window.startMs}
@@ -638,14 +950,10 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                     .join('\n')}
                 >
                   {stackedBars.map((bar) => {
-                    const usedPastHalf =
-                      bar.remaining !== null && bar.remaining <= 50;
-                    const pct =
-                      bar.remaining === null ? '--' : `${Math.round(bar.remaining)}%`;
+                    const usedPastHalf = bar.remaining !== null && bar.remaining <= 50;
+                    const pct = bar.remaining === null ? '--' : `${Math.round(bar.remaining)}%`;
                     const barAccent =
-                      bar.tone === 'fable'
-                        ? TIMELINE_ACCENTS.fable[resolvedTheme]
-                        : accent;
+                      bar.tone === 'fable' ? TIMELINE_ACCENTS.fable[resolvedTheme] : accent;
                     return (
                       <div
                         key={bar.id}
@@ -690,8 +998,8 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                 key={window.startMs}
                 className={`${styles.window} ${styles[`window${capitalize(window.state)}`]}`}
                 data-window-state={window.state}
-                  data-clipped-start={window.startMs < span.startMs ? 1 : 0}
-                  data-clipped-end={window.endMs > span.endMs ? 1 : 0}
+                data-clipped-start={window.startMs < span.startMs ? 1 : 0}
+                data-clipped-end={window.endMs > span.endMs ? 1 : 0}
                 data-window-start-ms={window.startMs}
                 data-window-end-ms={window.endMs}
                 style={{ left: `${window.leftPercent}%`, width: `${window.widthPercent}%` }}
@@ -706,7 +1014,9 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
                 {window.remaining !== null && (
                   <span
                     className={styles.windowFill}
-                    style={{ width: `${visibleUsedPercent(window, window.remaining, span.startMs, span.endMs)}%` }}
+                    style={{
+                      width: `${visibleUsedPercent(window, window.remaining, span.startMs, span.endMs)}%`,
+                    }}
                   />
                 )}
                 {showLabel && (
@@ -747,7 +1057,10 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
               role="img"
               aria-label={title.split('\n').join(', ')}
             >
-              <span className={styles.resetCreditLabel} data-align-end={credit.leftPercent > 75 ? 1 : 0}>
+              <span
+                className={styles.resetCreditLabel}
+                data-align-end={credit.leftPercent > 75 ? 1 : 0}
+              >
                 {t('quota_management.windows_credit_expiry_short', {
                   defaultValue: 'Credit expires {{date}}',
                   date: formatDay(credit.expiresAtMs),

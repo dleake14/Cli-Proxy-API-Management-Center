@@ -1,0 +1,208 @@
+{
+ "s1": {
+  "t": "2026-09-15T11:40:16.724Z",
+  "lanes": [
+   {
+    "name": "Codex",
+    "period": "7d",
+    "reset": "Resets Tue 09/22 06:40",
+    "live": [
+     "Codex\n09/08 06:40 \u2192 09/15 06:40"
+    ],
+    "mark": [
+     "on-pace: 0% remaining"
+    ]
+   },
+   {
+    "name": "Claude \u00b7 fable",
+    "period": null,
+    "reset": "Resets Wed 09/16 02:00",
+    "live": [
+     "Claude \u00b7 fable\n09/09 02:00 \u2192 09/16 02:00\n53% remaining"
+    ],
+    "mark": [
+     "on-pace: 12% remaining"
+    ]
+   },
+   {
+    "name": "Claude \u00b7 7-day limit",
+    "period": null,
+    "reset": "Resets Wed 09/16 02:00",
+    "live": [
+     "Claude \u00b7 7-day limit\n09/09 02:00 \u2192 09/16 02:00\n30% remaining"
+    ],
+    "mark": [
+     "on-pace: 12% remaining"
+    ]
+   },
+   {
+    "name": "Grok",
+    "period": "7d",
+    "reset": "Resets Wed 09/16 16:28",
+    "live": [
+     "Grok\n09/09 16:28 \u2192 09/16 16:28\n79% remaining"
+    ],
+    "mark": [
+     "on-pace: 20% remaining"
+    ]
+   },
+   {
+    "name": "Gemini",
+    "period": null,
+    "reset": "Resets Thu 09/17 14:10",
+    "live": [
+     "Gemini\n09/10 14:10 \u2192 09/17 14:10\n67% remaining"
+    ],
+    "mark": [
+     "on-pace: 33% remaining"
+    ]
+   },
+   {
+    "name": "Cursor Ultra",
+    "period": null,
+    "reset": "Resets Sat 09/19 05:47",
+    "live": [
+     "Cursor Models: 75% remaining\nOther Models: 39% remaining",
+     null,
+     null
+    ],
+    "mark": [
+     "on-pace: 13% remaining",
+     "on-pace: 13% remaining"
+    ]
+   },
+   {
+    "name": "Muse High Usage",
+    "period": null,
+    "reset": "Resets Sun 09/20 19:00",
+    "live": [
+     "High Usage: 96% remaining",
+     null
+    ],
+    "mark": [
+     "on-pace: 79% remaining"
+    ]
+   }
+  ],
+  "cards": [
+   "width: 100%; --meter-index: 0; :: Weekly limit | 100% | 09/22, 06:40 | in 7 days",
+   "width: 84%; --meter-index: 0; :: 5-hour limit | 84% | 09/15, 08:30 | in 1 hour",
+   "width: 30%; --meter-index: 1; :: 7-day limit | 30% | 09/16, 02:00 | in 19 hours",
+   "width: 53%; --meter-index: 2; :: fable | 53% | 09/16, 02:00 | in 19 hours",
+   "width: 79%; --meter-index: 0; :: Weekly limit | Used 21% | Resets 09/16, 16:28 | in 1 day",
+   "width: 84%; --meter-index: 1; :: GrokBuild usage | Used 16%",
+   "width: 98%; --meter-index: 2; :: GrokChat usage | Used 2%",
+   "width: 100%; --meter-index: 0; :: Five Hour Limit Remaining | Quota available | Refreshes in 5h 0m",
+   "width: 66.7%; --meter-index: 1; :: Weekly Limit Remaining | 67% remaining | Refreshes in 2d 7h",
+   "width: 75%; --meter-index: 0; :: Cursor Models | 75% | 09/19, 05:47 | in 3 days",
+   "width: 39%; --meter-index: 1; :: Other Models | 39% | 09/19, 05:47 | in 3 days",
+   "width: 98%; --meter-index: 0; :: Current usage | 2% used",
+   "width: 96%; --meter-index: 1; :: High Usage | 4% used | 09/20, 19:00 | in 5 days"
+  ],
+  "range": "09/08 \u2013 09/27 \u00b7 20 days \u00b7 America/Chicago \u00b7 current",
+  "nowLine": "left: 36.3889%;"
+ },
+ "s2": {
+  "t": "2026-09-15T11:42:46.749Z",
+  "lanes": [
+   {
+    "name": "Codex",
+    "period": "7d",
+    "reset": "Resets Tue 09/22 06:42",
+    "live": [
+     "Codex\n09/08 06:42 \u2192 09/15 06:42"
+    ],
+    "mark": [
+     "on-pace: 0% remaining"
+    ]
+   },
+   {
+    "name": "Claude \u00b7 fable",
+    "period": null,
+    "reset": "Resets Wed 09/16 02:00",
+    "live": [
+     "Claude \u00b7 fable\n09/09 02:00 \u2192 09/16 02:00\n53% remaining"
+    ],
+    "mark": [
+     "on-pace: 11% remaining"
+    ]
+   },
+   {
+    "name": "Claude \u00b7 7-day limit",
+    "period": null,
+    "reset": "Resets Wed 09/16 02:00",
+    "live": [
+     "Claude \u00b7 7-day limit\n09/09 02:00 \u2192 09/16 02:00\n29% remaining"
+    ],
+    "mark": [
+     "on-pace: 11% remaining"
+    ]
+   },
+   {
+    "name": "Grok",
+    "period": "7d",
+    "reset": "Resets Wed 09/16 16:28",
+    "live": [
+     "Grok\n09/09 16:28 \u2192 09/16 16:28\n79% remaining"
+    ],
+    "mark": [
+     "on-pace: 20% remaining"
+    ]
+   },
+   {
+    "name": "Gemini",
+    "period": null,
+    "reset": "Resets Thu 09/17 14:10",
+    "live": [
+     "Gemini\n09/10 14:10 \u2192 09/17 14:10\n67% remaining"
+    ],
+    "mark": [
+     "on-pace: 33% remaining"
+    ]
+   },
+   {
+    "name": "Cursor Ultra",
+    "period": null,
+    "reset": "Resets Sat 09/19 05:47",
+    "live": [
+     "Cursor Models: 75% remaining\nOther Models: 39% remaining",
+     null,
+     null
+    ],
+    "mark": [
+     "on-pace: 13% remaining",
+     "on-pace: 13% remaining"
+    ]
+   },
+   {
+    "name": "Muse High Usage",
+    "period": null,
+    "reset": "Resets Sun 09/20 19:00",
+    "live": [
+     "High Usage: 96% remaining",
+     null
+    ],
+    "mark": [
+     "on-pace: 79% remaining"
+    ]
+   }
+  ],
+  "cards": [
+   "width: 100%; --meter-index: 0; :: Weekly limit | 100% | 09/22, 06:42 | in 7 days",
+   "width: 83%; --meter-index: 0; :: 5-hour limit | 83% | 09/15, 08:30 | in 1 hour",
+   "width: 29%; --meter-index: 1; :: 7-day limit | 29% | 09/16, 02:00 | in 19 hours",
+   "width: 53%; --meter-index: 2; :: fable | 53% | 09/16, 02:00 | in 19 hours",
+   "width: 79%; --meter-index: 0; :: Weekly limit | Used 21% | Resets 09/16, 16:28 | in 1 day",
+   "width: 84%; --meter-index: 1; :: GrokBuild usage | Used 16%",
+   "width: 98%; --meter-index: 2; :: GrokChat usage | Used 2%",
+   "width: 100%; --meter-index: 0; :: Five Hour Limit Remaining | Quota available | Refreshes in 5h 0m",
+   "width: 66.7%; --meter-index: 1; :: Weekly Limit Remaining | 67% remaining | Refreshes in 2d 7h",
+   "width: 75%; --meter-index: 0; :: Cursor Models | 75% | 09/19, 05:47 | in 3 days",
+   "width: 39%; --meter-index: 1; :: Other Models | 39% | 09/19, 05:47 | in 3 days",
+   "width: 98%; --meter-index: 0; :: Current usage | 2% used",
+   "width: 96%; --meter-index: 1; :: High Usage | 4% used | 09/20, 19:00 | in 5 days"
+  ],
+  "range": "09/08 \u2013 09/27 \u00b7 20 days \u00b7 America/Chicago \u00b7 current",
+  "nowLine": "left: 36.3959%;"
+ }
+}

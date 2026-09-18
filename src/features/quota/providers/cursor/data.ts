@@ -8,6 +8,12 @@
 import type { TFunction } from 'i18next';
 import type { AuthFileItem, CursorQuotaRow, CursorQuotaState } from '@/types';
 import { CURSOR_USAGE_ENDPOINT } from '@/utils/quota/constants';
+import {
+  fetchSidecarJson,
+  isSidecarPayloadStale,
+  SidecarStaleError,
+  SidecarTimeoutError,
+} from '@/utils/quota/sidecarFetch';
 import { isCursorFile, isDisabledAuthFile } from '@/utils/quota/validators';
 import { isCursorTimelineRow } from '../../windowVisibility';
 import type { QuotaProviderData } from '../types';
@@ -19,6 +25,7 @@ export interface CursorUsageWindow {
   limit?: number | string | null;
   reset_at_ms?: number | string | null;
   period_hours?: number | string | null;
+  stale?: boolean;
 }
 
 export interface CursorUsagePayload {
@@ -65,14 +72,14 @@ export async function requestCursorUsage(
   endpoint: string = CURSOR_USAGE_ENDPOINT,
   fetchImpl: typeof fetch = fetch
 ): Promise<CursorUsagePayload> {
-  const response = await fetchImpl(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
+  const { response, payload } = await fetchSidecarJson<CursorUsagePayload>(endpoint, fetchImpl);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
-  const payload = (await response.json()) as CursorUsagePayload;
   if (!payload || payload.ok === false) {
     throw new Error(payload?.error || 'empty_data');
   }
+  if (isSidecarPayloadStale(payload)) throw new SidecarStaleError();
   return payload;
 }
 
@@ -87,7 +94,13 @@ const fetchCursorQuota = async (file: AuthFileItem, t: TFunction): Promise<Curso
   }
   if (failure) {
     throw new Error(
-      failure.message.startsWith('HTTP') ? failure.message : t('cursor_quota.unreachable')
+      failure instanceof SidecarStaleError
+        ? t('cursor_quota.stale_data')
+        : failure instanceof SidecarTimeoutError
+          ? t('cursor_quota.timeout')
+          : failure.message.startsWith('HTTP')
+            ? failure.message
+            : t('cursor_quota.unreachable')
     );
   }
   const rows = buildCursorQuotaRows(payload);

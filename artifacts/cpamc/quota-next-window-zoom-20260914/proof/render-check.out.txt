@@ -1,0 +1,5 @@
+{"zoomDays":3,"spanStart":"2026-09-14","spanDays":3,"hasZoomSlider":true,"perLane":[{"lane":"claude-a","live":1,"next":1},{"lane":"codex-a","live":1,"next":0}]}
+{"zoomDays":7,"spanStart":"2026-09-14","spanDays":7,"hasZoomSlider":true,"perLane":[{"lane":"claude-a","live":1,"next":1},{"lane":"codex-a","live":1,"next":1}]}
+{"zoomDays":15,"spanStart":"2026-09-14","spanDays":15,"hasZoomSlider":true,"perLane":[{"lane":"claude-a","live":1,"next":2},{"lane":"codex-a","live":1,"next":2}]}
+{"zoomDays":30,"spanStart":"2026-09-14","spanDays":30,"hasZoomSlider":true,"perLane":[{"lane":"claude-a","live":1,"next":4},{"lane":"codex-a","live":1,"next":4}]}
+NEXT_MARKUP: ="left:0%;width:13.88888888888889%" title="All models: 80% remaining"><div class="undefined undefined" style="--provider-accent:#c05621"><span style="width:0%"></span><span data-swap="0">All models <b>80%</b></span></div></div><div class="undefined undefined" data-window-state="next" data-clipped-st

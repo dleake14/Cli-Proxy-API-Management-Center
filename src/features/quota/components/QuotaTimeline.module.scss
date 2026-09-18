@@ -137,6 +137,44 @@ $lane-width: 210px;
   border-radius: $radius-lg;
   background: var(--bg-primary);
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scrollControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.scrollHint {
+  margin-right: 4px;
+  color: var(--text-quaternary);
+  font-size: 10.5px;
+}
+
+.scrollControls button {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-hover);
+    outline-offset: 2px;
+  }
 }
 
 .empty {
@@ -169,6 +207,18 @@ $lane-width: 210px;
   color: var(--text-quaternary);
   display: flex;
   align-items: flex-end;
+}
+
+// While the chart pans horizontally the credential column must stay put —
+// otherwise scrolled bars lose the name that says whose they are. Sticky left
+// inside the scrolling .chart keeps the label column fixed over the bars.
+.axisLabel,
+.laneHead {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--bg-primary);
+  box-shadow: 1px 0 0 var(--border-color);
 }
 
 .axisCells {
@@ -368,11 +418,13 @@ $lane-width: 210px;
   color: var(--text-primary);
 }
 
-// Upcoming: dashed outline, nothing consumed yet.
+// Upcoming: dashed outline, nothing consumed yet. Drawn in a faded weight so
+// the next subscription run is visible without competing with the live window.
 .windowNext {
   background: transparent;
   border: 1px dashed color-mix(in srgb, var(--provider-accent) 32%, transparent);
   color: var(--text-quaternary);
+  opacity: 0.55;
 }
 
 // Elapsed: recedes.

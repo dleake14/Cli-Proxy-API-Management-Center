@@ -1,0 +1,313 @@
+diff --git a/src/components/layout/MainLayout.tsx b/src/components/layout/MainLayout.tsx
+index b58f97c..7083eec 100644
+--- a/src/components/layout/MainLayout.tsx
++++ b/src/components/layout/MainLayout.tsx
+@@ -51,6 +51,7 @@ import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
+ import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
+ import { isSupportedLanguage } from '@/utils/language';
+ import { getSidebarShortcutLabel, isSidebarToggleShortcut } from '@/utils/sidebarShortcut';
++import { readSidebarCollapsedDefault, writeShellUiState } from './shellUiState';
+ import type { Theme } from '@/types';
+ 
+ const sidebarIcons: Record<string, ReactNode> = {
+@@ -325,8 +326,10 @@ export function MainLayout() {
+   const language = useLanguageStore((state) => state.language);
+   const setLanguage = useLanguageStore((state) => state.setLanguage);
+ 
++  // Rail collapse is a shell preference: the CPAMC app window opens collapsed
++  // (fixed width on the secondary display) and remembers a session toggle.
+   const [sidebarOpen, setSidebarOpen] = useState(false);
+-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
++  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsedDefault);
+   const [authFilesCount, setAuthFilesCount] = useState<number | null>(null);
+   const [railTooltip, setRailTooltip] = useState<{
+     targetID: string;
+@@ -825,18 +828,26 @@ export function MainLayout() {
+ 
+   const shortcutText = getSidebarShortcutLabel(isMac);
+ 
++  const toggleSidebarCollapsed = useCallback(() => {
++    hideRailTooltip();
++    setSidebarCollapsed((prev) => {
++      const next = !prev;
++      writeShellUiState({ sidebarCollapsed: next });
++      return next;
++    });
++  }, [hideRailTooltip]);
++
+   useEffect(() => {
+     const handleKeyDown = (event: KeyboardEvent) => {
+       if (isSidebarToggleShortcut(event)) {
+         event.preventDefault();
+-        hideRailTooltip();
+-        setSidebarCollapsed((prev) => !prev);
++        toggleSidebarCollapsed();
+       }
+     };
+ 
+     window.addEventListener('keydown', handleKeyDown);
+     return () => window.removeEventListener('keydown', handleKeyDown);
+-  }, [hideRailTooltip]);
++  }, [toggleSidebarCollapsed]);
+ 
+   const renderNavBadge = (badge?: number, badgeLabel?: string) =>
+     typeof badge === 'number' ? (
+@@ -982,10 +993,7 @@ export function MainLayout() {
+         <button
+           type="button"
+           className="sidebar-toggle-floating"
+-          onClick={() => {
+-            hideRailTooltip();
+-            setSidebarCollapsed((prev) => !prev);
+-          }}
++          onClick={toggleSidebarCollapsed}
+           onMouseEnter={(event) =>
+             handleRailTooltipMouseEnter(event, 'sidebar-toggle', sidebarToggleLabel, shortcutText)
+           }
+diff --git a/src/features/quota/QuotaPage.tsx b/src/features/quota/QuotaPage.tsx
+index 8e358a6..d203862 100644
+--- a/src/features/quota/QuotaPage.tsx
++++ b/src/features/quota/QuotaPage.tsx
+@@ -48,6 +48,7 @@ import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers
+ import type { QuotaProviderType } from './providers/types';
+ import { useQuotaActions } from './hooks/useQuotaActions';
+ import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
++import { authFilesRetryDelayMs } from './authFilesRetry';
+ import { readQuotaUiState, writeQuotaUiState } from './uiState';
+ import styles from './QuotaPage.module.scss';
+ 
+@@ -67,6 +68,8 @@ export function QuotaPage() {
+   const [files, setFiles] = useState<AuthFileItem[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState('');
++  const [authFilesLoadFailed, setAuthFilesLoadFailed] = useState(false);
++  const [authFilesFailureCount, setAuthFilesFailureCount] = useState(0);
+   const [tab, setTab] = useState<QuotaTabId>(() => readQuotaUiState()?.tab ?? 'all');
+   const [sortMode, setSortMode] = useState<QuotaSortMode>(
+     () => readQuotaUiState()?.sortMode ?? 'default'
+@@ -79,16 +82,25 @@ export function QuotaPage() {
+ 
+   /* ---------- 文件列表 ---------- */
+ 
++  const filesLoadingRef = useRef(false);
++
+   const loadFiles = useCallback(async () => {
++    if (filesLoadingRef.current) return;
++    filesLoadingRef.current = true;
+     setLoading(true);
+     setError('');
+     try {
+       const data = await authFilesApi.list();
+       setFiles(data?.files || []);
++      setAuthFilesLoadFailed(false);
++      setAuthFilesFailureCount(0);
+     } catch (err: unknown) {
+       const message = err instanceof Error ? err.message : t('notification.refresh_failed');
+       setError(message);
++      setAuthFilesLoadFailed(true);
++      setAuthFilesFailureCount((count) => count + 1);
+     } finally {
++      filesLoadingRef.current = false;
+       setLoading(false);
+     }
+   }, [t]);
+@@ -99,6 +111,28 @@ export function QuotaPage() {
+     void loadFiles();
+   }, [loadFiles]);
+ 
++  // A cold list failure previously left `entries` empty forever: the quota
++  // refresh controller correctly refuses to fetch quota for an unknown file
++  // list, so it cannot recover the list itself. Retry only actual failures;
++  // a successful empty list is a valid steady state.
++  useEffect(() => {
++    if (!authFilesLoadFailed || disableControls) return;
++    const delay = authFilesRetryDelayMs(authFilesFailureCount);
++    const timer = window.setTimeout(() => { void loadFiles(); }, delay);
++    return () => window.clearTimeout(timer);
++  }, [authFilesFailureCount, authFilesLoadFailed, disableControls, loadFiles]);
++
++  useEffect(() => {
++    if (!authFilesLoadFailed || disableControls) return;
++    const retryNow = () => { void loadFiles(); };
++    window.addEventListener('focus', retryNow);
++    window.addEventListener('online', retryNow);
++    return () => {
++      window.removeEventListener('focus', retryNow);
++      window.removeEventListener('online', retryNow);
++    };
++  }, [authFilesLoadFailed, disableControls, loadFiles]);
++
+   /* ---------- 额度缓存 ----------
+    * 排在归类/排序之前：「最快恢复优先」要读它算排序键。 */
+ 
+@@ -349,6 +383,18 @@ export function QuotaPage() {
+           </div>
+         )}
+ 
++        {/* Quota windows first: the timeline is the comparison surface; the
++            card grid below stays the general per-credential meter listing. */}
++        <QuotaTimeline
++          entries={sortedEntries}
++          quotaFor={getQuota}
++          displayNameFor={displayNameFor}
++          resolvedTheme={resolvedTheme}
++          refreshing={loading || batchLoading}
++          disableControls={disableControls}
++          onRefreshAll={handleRefreshAll}
++        />
++
+         {loading ? (
+           <div className={styles.grid} aria-hidden="true">
+             {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
+@@ -420,16 +466,6 @@ export function QuotaPage() {
+           </div>
+         )}
+ 
+-        {/* Compare every credential in the selected tool filter, independent of card pagination. */}
+-        <QuotaTimeline
+-          entries={sortedEntries}
+-          quotaFor={getQuota}
+-          displayNameFor={displayNameFor}
+-          resolvedTheme={resolvedTheme}
+-          refreshing={loading || batchLoading}
+-          disableControls={disableControls}
+-          onRefreshAll={handleRefreshAll}
+-        />
+       </section>
+     </div>
+   );
+diff --git a/src/components/layout/shellUiState.ts b/src/components/layout/shellUiState.ts
+new file mode 100644
+index 0000000..750c9ba
+--- /dev/null
++++ b/src/components/layout/shellUiState.ts
+@@ -0,0 +1,46 @@
++/**
++ * Shell chrome preferences: whether the navigation rail is collapsed.
++ *
++ * Session-scoped on purpose. CPAMC opens as a fixed app window on the
++ * secondary display, where the label rail steals horizontal room the quota
++ * cards can use, so a fresh app window starts collapsed. The operator can
++ * still expand it for the life of that window (header chevron or Ctrl+B) and
++ * the choice is remembered until the window closes — a new launch collapses
++ * again instead of inheriting the last session's rail.
++ */
++
++export type ShellUiState = {
++  sidebarCollapsed?: boolean;
++};
++
++const SHELL_UI_STATE_KEY = 'shell.uiState';
++
++export const readShellUiState = (): ShellUiState | null => {
++  if (typeof window === 'undefined') return null;
++  try {
++    const raw = window.sessionStorage.getItem(SHELL_UI_STATE_KEY);
++    if (!raw) return null;
++    const parsed = JSON.parse(raw) as ShellUiState;
++    if (!parsed || typeof parsed !== 'object') return null;
++    return {
++      sidebarCollapsed:
++        typeof parsed.sidebarCollapsed === 'boolean' ? parsed.sidebarCollapsed : undefined,
++    };
++  } catch {
++    return null;
++  }
++};
++
++export const writeShellUiState = (state: ShellUiState) => {
++  if (typeof window === 'undefined') return;
++  try {
++    const next = { ...readShellUiState(), ...state };
++    window.sessionStorage.setItem(SHELL_UI_STATE_KEY, JSON.stringify(next));
++  } catch {
++    // Storage can be unavailable; the collapse still works for this render tree.
++  }
++};
++
++/** App-window default: collapsed until the operator says otherwise. */
++export const readSidebarCollapsedDefault = (): boolean =>
++  readShellUiState()?.sidebarCollapsed ?? true;
+diff --git a/tests/shellUiState.test.ts b/tests/shellUiState.test.ts
+new file mode 100644
+index 0000000..f27c020
+--- /dev/null
++++ b/tests/shellUiState.test.ts
+@@ -0,0 +1,77 @@
++/**
++ * Shell chrome state (sidebar collapse).
++ *
++ * The default is the behaviour under test: a fresh CPAMC app window must open
++ * collapsed, while an explicit toggle inside that session must stick.
++ */
++
++import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
++import {
++  readShellUiState,
++  readSidebarCollapsedDefault,
++  writeShellUiState,
++} from '@/components/layout/shellUiState';
++
++const KEY = 'shell.uiState';
++
++/** Test files share one process — leaving a fake `window` behind would leak. */
++const originalWindow = (globalThis as { window?: unknown }).window;
++
++function installSessionStorage() {
++  const store = new Map<string, string>();
++  const storage = {
++    getItem: (key: string) => store.get(key) ?? null,
++    setItem: (key: string, value: string) => void store.set(key, value),
++    removeItem: (key: string) => void store.delete(key),
++    clear: () => store.clear(),
++    key: (index: number) => [...store.keys()][index] ?? null,
++    get length() {
++      return store.size;
++    },
++  };
++  (globalThis as unknown as { window: unknown }).window = { sessionStorage: storage };
++  return storage;
++}
++
++let storage: ReturnType<typeof installSessionStorage>;
++
++beforeEach(() => {
++  storage = installSessionStorage();
++});
++
++afterAll(() => {
++  if (originalWindow === undefined) {
++    delete (globalThis as { window?: unknown }).window;
++  } else {
++    (globalThis as { window?: unknown }).window = originalWindow;
++  }
++});
++
++describe('shell ui state', () => {
++  test('a fresh app window defaults to a collapsed sidebar', () => {
++    expect(readShellUiState()).toBeNull();
++    expect(readSidebarCollapsedDefault()).toBe(true);
++  });
++
++  test('an explicit expansion in the session is remembered', () => {
++    writeShellUiState({ sidebarCollapsed: false });
++    expect(readSidebarCollapsedDefault()).toBe(false);
++    expect(readShellUiState()).toEqual({ sidebarCollapsed: false });
++  });
++
++  test('rejects values that are not part of the contract', () => {
++    storage.setItem(KEY, JSON.stringify({ sidebarCollapsed: 'yes' }));
++    expect(readShellUiState()).toEqual({ sidebarCollapsed: undefined });
++    expect(readSidebarCollapsedDefault()).toBe(true);
++  });
++
++  test('survives absent, malformed, and non-object payloads', () => {
++    expect(readShellUiState()).toBeNull();
++
++    storage.setItem(KEY, '{not json');
++    expect(readShellUiState()).toBeNull();
++
++    storage.setItem(KEY, '"a string"');
++    expect(readShellUiState()).toBeNull();
++  });
++});

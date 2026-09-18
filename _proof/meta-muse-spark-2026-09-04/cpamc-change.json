@@ -1,0 +1,72 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "Meta Muse Spark quota card",
+      "server-side Meta API credential boundary",
+      "request and token rate-limit rows",
+      "runtime-only synthetic provider",
+      "deterministic parsing and classification tests",
+      "production build and local route proof",
+      "rollback preserves pre-existing worktree changes"
+    ]
+  },
+  "baseline": {
+    "branch": "main",
+    "baseline_ref": "git:a32b4ef with pre-existing CPAMC quota WIP preserved"
+  },
+  "changed_files": [
+    "src/features/authFiles/constants.ts",
+    "src/features/authFiles/components/AuthFileQuotaSection.tsx",
+    "src/features/quota/QuotaPage.tsx",
+    "src/features/quota/constants.ts",
+    "src/features/quota/logic.ts",
+    "src/features/quota/providers/index.ts",
+    "src/features/quota/providers/meta/MetaQuotaBody.tsx",
+    "src/features/quota/providers/meta/data.ts",
+    "src/features/quota/providers/types.ts",
+    "src/stores/useQuotaStore.ts",
+    "src/features/quota/resetSchedule.ts",
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/ru.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "src/types/authFile.ts",
+    "src/types/quota.ts",
+    "src/utils/quota/constants.ts",
+    "src/utils/quota/validators.ts",
+    "tests/metaQuota.test.ts",
+    "tests/quotaPageLogic.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": ["proof/meta-spark-card.html", "proof/browser-console.log"]
+  },
+  "rollback": {
+    "command": "Reverse only the Meta Muse Spark hunks in diff.patch; preserve all pre-existing WIP.",
+    "baseline_ref": "git:a32b4ef plus recorded pre-existing worktree state"
+  },
+  "ui_change": true,
+  "proof": {"browser": "Chromium-compatible production bundle smoke", "route": "/#/quota", "viewport": "1440x900", "console_errors": 0},
+  "checks": {
+    "required_paths": [
+      "src/features/quota/providers/meta/data.ts",
+      "src/features/quota/providers/meta/MetaQuotaBody.tsx",
+      "tests/metaQuota.test.ts"
+    ],
+    "required_text": [
+      {"path": "src/features/quota/providers/types.ts", "contains": "'meta'"},
+      {"path": "src/features/quota/logic.ts", "contains": "META_SYNTHETIC_FILE"},
+      {"path": "src/utils/quota/constants.ts", "contains": "META_USAGE_ENDPOINT"}
+    ],
+    "forbidden_text": [
+      {"path": "src/features/quota/providers/meta/data.ts", "contains": "META_API_KEY="}
+    ]
+  }
+}

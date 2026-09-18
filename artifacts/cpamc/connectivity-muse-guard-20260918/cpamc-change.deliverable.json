@@ -1,0 +1,40 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC connectivity and quota-tracking repair",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": [
+      "validation.log",
+      "diff.patch",
+      "usage-diff.patch",
+      "chrome-scut-diff.patch",
+      "proof/browser-proof.json",
+      "proof/cpamc-quota.png",
+      "proof/muse-runtime.json"
+    ]
+  },
+  "scope": {
+    "must_cover": [
+      "management backend",
+      "Cursor",
+      "Ollama",
+      "Muse",
+      "navigation drift",
+      "stale",
+      "LAN",
+      "rollback"
+    ]
+  },
+  "floors": {
+    "min_words": 180,
+    "min_words_per_covered_term": 1
+  },
+  "forbidden_tokens": [
+    "TODO",
+    "Lorem ipsum",
+    "OLLAMA_API_KEY="
+  ]
+}

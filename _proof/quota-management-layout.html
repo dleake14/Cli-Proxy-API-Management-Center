@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>CPAMC quota layout proof</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 24px; background: #f4f5f7; color: #18212f; }
+      main { display: grid; gap: 16px; max-width: 720px; }
+      section { background: white; border: 1px solid #d8dee8; border-radius: 10px; padding: 16px; }
+      h1, h2 { margin: 0 0 12px; }
+      h1 { font-size: 20px; }
+      h2 { font-size: 16px; }
+      .quotaRow, .codexPlan { margin: 10px 0; }
+      .quotaRowHeader { display: flex; justify-content: space-between; gap: 12px; }
+      .quotaMeta { display: flex; gap: 8px; }
+      [role="progressbar"] { margin-top: 4px; }
+      .proof-note { color: #526070; margin: 0 0 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>CPAMC quota layout proof</h1>
+    <p class="proof-note" data-provider-order="codex,claude,xai,antigravity,ollama,kimi">Provider order: codex → claude → xai → antigravity → ollama → kimi</p>
+    <main><section data-provider="Codex"><h2>Codex</h2><div class="codexPlan"><span class="codexPlanItem"><span class="codexPlanLabel">Plan</span><span class="elitePlanValue">Pro 20x</span></span></div><div class="quotaRow"><div class="quotaRowHeader"><span class="quotaModel">5-hour limit</span><div class="quotaMeta"><span class="quotaPercent">62%</span><span class="quotaReset">08-02 18:00</span><span class="quotaResetRelative">in 3 hours</span></div></div><div class="quotaBar"><div class="quotaBarFill quotaBarFillMedium" style="width:62%;--meter-index:0"></div></div></div></section>
+<section data-provider="Gemini / Antigravity"><h2>Gemini / Antigravity</h2><div class="antigravityQuotaGroup"><div class="antigravityQuotaGroupHeader"><span class="antigravityQuotaGroupTitle">Gemini models</span></div><div class="quotaRow"><div class="quotaRowHeader"><span class="quotaModel">Weekly limit</span><div class="quotaMeta"><span class="quotaPercent">80% remaining</span><span class="quotaReset">-</span></div></div><div class="quotaBar"><div class="quotaBarFill quotaBarFillHigh" style="width:80%;--meter-index:0"></div></div></div></div></section>
+<section data-provider="Grok / xAI"><h2>Grok / xAI</h2><div class="codexPlan"><span class="codexPlanLabel">Plan</span><span class="codexPlanValue">SuperGrok</span></div><div class="quotaRow"><div class="quotaRowHeader"><span class="quotaModel">Weekly limit</span><div class="quotaMeta"><span class="quotaPercent">Used 25%</span><span class="quotaReset">Resets 08/07, 19:00</span></div></div><div class="quotaBar"><div class="quotaBarFill quotaBarFillHigh" style="width:75%;--meter-index:0"></div></div></div><div class="quotaRow"><div class="quotaRowHeader"><span class="quotaModel">Grok usage</span><div class="quotaMeta"><span class="quotaPercent">Used 25%</span></div></div><div class="quotaBar"><div class="quotaBarFill quotaBarFillHigh" style="width:75%;--meter-index:1"></div></div></div><div class="quotaRow"><div class="quotaRowHeader"><span class="quotaModel">Pay as you go</span><div class="quotaMeta"><span class="quotaPercent">100%</span><span class="quotaAmount">$100.00 / $100.00</span></div></div><div class="quotaBar"><div class="quotaBarFill quotaBarFillHigh" style="width:100%;--meter-index:2"></div></div></div></section></main>
+  </body>
+</html>

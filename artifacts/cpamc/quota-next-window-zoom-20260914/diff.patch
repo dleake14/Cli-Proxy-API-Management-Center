@@ -1,0 +1,145 @@
+diff --git a/src/features/quota/components/QuotaTimeline.module.scss b/src/features/quota/components/QuotaTimeline.module.scss
+index dd2bffa..5dd1e3e 100644
+--- a/src/features/quota/components/QuotaTimeline.module.scss
++++ b/src/features/quota/components/QuotaTimeline.module.scss
+@@ -363,11 +363,13 @@ $lane-width: 210px;
+   color: var(--text-primary);
+ }
+ 
+-// Upcoming: dashed outline, nothing consumed yet.
++// Upcoming: dashed outline, nothing consumed yet. Drawn in a faded weight so
++// the next subscription run is visible without competing with the live window.
+ .windowNext {
+   background: transparent;
+   border: 1px dashed color-mix(in srgb, var(--provider-accent) 32%, transparent);
+   color: var(--text-quaternary);
++  opacity: 0.55;
+ }
+ 
+ // Elapsed: recedes.
+diff --git a/src/features/quota/components/QuotaTimeline.tsx b/src/features/quota/components/QuotaTimeline.tsx
+index 8c93d9c..b3ac1cc 100644
+--- a/src/features/quota/components/QuotaTimeline.tsx
++++ b/src/features/quota/components/QuotaTimeline.tsx
+@@ -221,6 +221,9 @@ export function QuotaTimeline({
+         widthPercent: ((dayEnd - dayStart) / (zoomed ? 4 : 1)) /
+           (span.endMs - span.startMs) * 100,
+         isDayStart,
++        // Dense spans drop every other date so the labels never collide once the
++        // chart is packed into the panel width instead of scrolling sideways.
++        showLabel: isDayStart && (zoomed || span.days <= 18 || day % 2 === 0),
+         isToday: formatDay(at) === todayKey,
+         isWeekend: dayIndex === 0 || dayIndex === 6,
+         weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[dayIndex]}`, {
+@@ -323,7 +326,7 @@ export function QuotaTimeline({
+         </div>
+       </header>
+ 
+-      <div className={styles.chart} style={{ '--timeline-min-width': `${210 + cells.length * 44}px` } as CSSProperties}>
++      <div className={styles.chart} style={{ '--timeline-min-width': `${210 + cells.length * (mode === 'session' ? 18 : 26)}px` } as CSSProperties}>
+         {lanes.length === 0 ? (
+           <div className={styles.empty} role="status">
+             {t('quota_management.windows_empty_session', {
+@@ -347,9 +350,9 @@ export function QuotaTimeline({
+                     style={{ flex: `0 0 ${cell.widthPercent}%` }}
+                   >
+                     <span className={styles.axisWeekday}>
+-                      {cell.isDayStart ? cell.weekday : ''}
++                      {cell.showLabel ? cell.weekday : ''}
+                     </span>
+-                    <span className={styles.axisDate}>{cell.label}</span>
++                    <span className={styles.axisDate}>{cell.showLabel ? cell.label : ''}</span>
+                   </div>
+                 ))}
+               </div>
+@@ -454,7 +457,7 @@ interface LaneProps {
+   span: { startMs: number; endMs: number; days: number };
+   now: number;
+   mode: TimelineMode;
+-  cells: { at: number; isWeekend: boolean; isDayStart: boolean; widthPercent: number }[];
++  cells: { at: number; isWeekend: boolean; isDayStart: boolean; showLabel: boolean; widthPercent: number }[];
+   nowPercent: number | null;
+   resolvedTheme: ResolvedTheme;
+ }
+diff --git a/src/features/quota/quotaTimelineModel.ts b/src/features/quota/quotaTimelineModel.ts
+index 5df32e1..7f84e34 100644
+--- a/src/features/quota/quotaTimelineModel.ts
++++ b/src/features/quota/quotaTimelineModel.ts
+@@ -921,8 +921,12 @@ export function zoomCurrentSpan(
+   visibleDays: number
+ ): { startMs: number; endMs: number; days: number } {
+   const days = clampTimelineZoomDays(mode, visibleDays);
+-  const fraction = Math.max(0, Math.min(1, (now - span.startMs) / (span.endMs - span.startMs)));
+-  const startMs = startOfDay(now - fraction * days * DAY_MS);
++  // Anchor the left edge at the start of today. The fit span begins at the
++  // current window's open, which can sit days in the past; re-centring on `now`
++  // kept that past history on screen, so zooming out replayed earlier days and
++  // pushed the next subscription runs off the right edge. Pinning the left edge
++  // to today means a wider range adds future time instead.
++  const startMs = Math.max(startOfDay(now), startOfDay(span.startMs));
+   return { startMs, endMs: addCalendarDays(startMs, days), days };
+ }
+ 
+diff --git a/tests/quotaTimeline.test.ts b/tests/quotaTimeline.test.ts
+index 184aeeb..3342c29 100644
+--- a/tests/quotaTimeline.test.ts
++++ b/tests/quotaTimeline.test.ts
+@@ -1007,6 +1007,24 @@ describe('zoom and quota clock regressions', () => {
+     }
+   });
+ 
++  test('zooming out extends into the future instead of replaying past days', () => {
++    const lane: TimelineLane = { name: 'Claude', displayName: 'Claude', provider: 'claude',
++      anchorMs: reset, periodHours: 168, remaining: 85, limits: [], resetCredits: [] };
++    const fitted = currentWindowSpan([lane], now, 15);
++    const narrow = zoomCurrentSpan(fitted, now, 'weekly', 7);
++    const wide = zoomCurrentSpan(fitted, now, 'weekly', 30);
++
++    // Left edge is pinned to today, not to a fraction of the old span.
++    expect(narrow.startMs).toBe(startOfDay(now));
++    expect(wide.startMs).toBe(narrow.startMs);
++    // Every extra day lands to the right, so the future windows stay on screen.
++    expect(wide.endMs).toBeGreaterThan(narrow.endMs);
++    expect(projectLane(lane, narrow.startMs, narrow.endMs, now, 'weekly')
++      .filter((w) => w.state === 'next').length)
++      .toBeLessThan(projectLane(lane, wide.startMs, wide.endMs, now, 'weekly')
++        .filter((w) => w.state === 'next').length);
++  });
++
+   test('clipped usage ends at the original window position, never restarts at the viewport', () => {
+     expect(visibleUsedPercent(window, 85, now - DAY_MS, reset + DAY_MS)).toBe(0);
+     expect(visibleUsedPercent(window, 50, window.startMs + 2 * DAY_MS, reset)).toBeCloseTo(30);
+diff --git a/tests/quotaTimelineRendering.test.ts b/tests/quotaTimelineRendering.test.ts
+index 05e6d2b..d9c396e 100644
+--- a/tests/quotaTimelineRendering.test.ts
++++ b/tests/quotaTimelineRendering.test.ts
+@@ -39,6 +39,29 @@ describe('QuotaTimeline rendering', () => {
+     const zoom = renderToStaticMarkup(createElement(QuotaTimeline, { ...props, initialZoomDays: 3 }));
+     expect(zoom).toContain(`data-next-reset-ms="${reset}"`);
+   });
++  test('default weekly view shows the next subscription run as a faded upcoming bar', () => {
++    const reset = new Date(2026, 7, 5, 12).getTime();
++    const markup = renderToStaticMarkup(
++      createElement(QuotaTimeline, {
++        ...baseProps,
++        quotaFor: () => ({
++          status: 'success',
++          windows: [
++            { id: 'seven-day', label: 'All models', usedPercent: 25, resetAtMs: reset, periodHours: 168 },
++          ],
++        }),
++      })
++    );
++
++    // Current subscription window plus at least one projected next run.
++    expect(markup).toContain('data-window-state="live"');
++    const nextWindows = markup.match(/data-window-state="next"/g) ?? [];
++    expect(nextWindows.length).toBeGreaterThanOrEqual(1);
++    // The live window owns the reported usage; projected runs must stay unfilled.
++    const nextStart = markup.indexOf('data-window-state="next"');
++    const nextBlock = markup.slice(nextStart, nextStart + 400);
++    expect(nextBlock).not.toContain('windowFill');
++  });
+   test('renders stacked Fable and all-models bars under one Claude credential', () => {
+     const now = new Date(2026, 7, 1, 12).getTime();
+     const reset = new Date(2026, 7, 5, 12).getTime();

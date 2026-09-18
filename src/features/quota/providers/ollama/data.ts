@@ -10,6 +10,12 @@
 import type { TFunction } from 'i18next';
 import type { AuthFileItem, OllamaQuotaRow, OllamaQuotaState } from '@/types';
 import { OLLAMA_USAGE_ENDPOINT } from '@/utils/quota/constants';
+import {
+  fetchSidecarJson,
+  isSidecarPayloadStale,
+  SidecarStaleError,
+  SidecarTimeoutError,
+} from '@/utils/quota/sidecarFetch';
 import { isDisabledAuthFile, isOllamaFile } from '@/utils/quota/validators';
 import type { QuotaProviderData } from '../types';
 
@@ -21,6 +27,7 @@ export interface OllamaUsageWindow {
   limit?: number | string | null;
   reset_at_ms?: number | string | null;
   period_hours?: number | string | null;
+  stale?: boolean;
 }
 
 export interface OllamaUsagePayload {
@@ -83,14 +90,14 @@ export async function requestOllamaUsage(
   endpoint: string = OLLAMA_USAGE_ENDPOINT,
   fetchImpl: typeof fetch = fetch
 ): Promise<OllamaUsagePayload> {
-  const response = await fetchImpl(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
+  const { response, payload } = await fetchSidecarJson<OllamaUsagePayload>(endpoint, fetchImpl);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
-  const payload = (await response.json()) as OllamaUsagePayload;
   if (!payload || payload.ok === false) {
     throw new Error(payload?.error || 'empty_data');
   }
+  if (isSidecarPayloadStale(payload)) throw new SidecarStaleError();
   return payload;
 }
 
@@ -109,7 +116,13 @@ const fetchOllamaQuota = async (file: AuthFileItem, t: TFunction): Promise<Ollam
   // message is only substituted when the sidecar itself is unreachable.
   if (failure) {
     throw new Error(
-      failure.message.startsWith('HTTP') ? failure.message : t('ollama_quota.unreachable')
+      failure instanceof SidecarStaleError
+        ? t('ollama_quota.stale_data')
+        : failure instanceof SidecarTimeoutError
+          ? t('ollama_quota.timeout')
+          : failure.message.startsWith('HTTP')
+            ? failure.message
+            : t('ollama_quota.unreachable')
     );
   }
 

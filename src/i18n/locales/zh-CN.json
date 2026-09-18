@@ -1753,6 +1753,8 @@
     "load_failed": "加载额度失败：{{message}}",
     "empty_data": "暂无额度数据",
     "unreachable": "无法连接 Usage Ledger（请在 127.0.0.1:47193 启动）",
+    "timeout": "Usage Ledger did not respond before the refresh deadline",
+    "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "刷新额度",
     "fetch_all": "全部拉取",
     "session_window": "会话",
@@ -1768,6 +1770,8 @@
     "load_failed": "Failed to load quota: {{message}}",
     "empty_data": "No quota data available",
     "unreachable": "Usage Ledger is unreachable (start it on 127.0.0.1:47193)",
+    "timeout": "Usage Ledger did not respond before the refresh deadline",
+    "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Refresh Quota"
   },
   "muse_quota": {
@@ -1780,6 +1784,8 @@
     "load_failed": "Failed to load quota: {{message}}",
     "empty_data": "No remaining-percent meter is published",
     "unavailable": "Muse High Usage remaining is not published by Meta.",
+    "timeout": "Usage Ledger did not respond before the refresh deadline",
+    "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Refresh Quota"
   }
 }

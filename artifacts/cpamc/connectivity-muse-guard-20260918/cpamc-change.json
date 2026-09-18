@@ -1,0 +1,106 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "CPAMC quota page recovers from transient management auth-file network failures",
+      "Cursor, Ollama, and Muse sidecars use the browser-visible Usage host instead of remote-browser localhost",
+      "sidecar requests time out, recover, and reject stale readings without inventing quota",
+      "isolated authenticated Meta usage tab is restored after navigation drift",
+      "all configured quota sources have end-to-end health evidence",
+      "existing uncommitted CPAMC, Usage, and chrome-scut work is preserved",
+      "deterministic tests, lint, type-check, production build, browser proof, and rollback evidence pass"
+    ]
+  },
+  "changed_files": [
+    "src/utils/connection.ts",
+    "src/features/quota/QuotaPage.tsx",
+    "src/features/quota/authFilesRetry.ts",
+    "src/features/quota/constants.ts",
+    "src/features/quota/logic.ts",
+    "src/features/quota/providers/cursor/data.ts",
+    "src/features/quota/providers/muse/data.ts",
+    "src/features/quota/providers/ollama/data.ts",
+    "src/utils/quota/constants.ts",
+    "src/utils/quota/sidecarFetch.ts",
+    "src/utils/quota/sidecarUrl.ts",
+    "tests/authFilesRetry.test.ts",
+    "tests/connection.test.ts",
+    "tests/quotaSidecarFetch.test.ts",
+    "tests/quotaPageLogic.test.ts",
+    "tests/quotaSidecarResponse.test.ts",
+    "tests/quotaSidecarUrl.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "usage_diff_path": "usage-diff.patch",
+    "chrome_scut_diff_path": "chrome-scut-diff.patch",
+    "proof_paths": [
+      "proof/browser-proof.json",
+      "proof/cpamc-quota.png",
+      "proof/muse-runtime.json"
+    ]
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/connectivity-muse-guard-20260918/diff.patch",
+    "usage_command": "cd /home/david/projects/usage && git apply -R /home/david/forks/cpamc/artifacts/cpamc/connectivity-muse-guard-20260918/usage-diff.patch",
+    "chrome_scut_command": "cd /home/david/projects/chrome-scut && git apply -R /home/david/forks/cpamc/artifacts/cpamc/connectivity-muse-guard-20260918/chrome-scut-diff.patch",
+    "baseline_ref": "git:274bba963980d26902ca416b9c4ad07cd526d33e (pre-existing worktree changes preserved)"
+  },
+  "ui_change": true,
+  "proof": {
+    "browser": "Chrome 152 headless, isolated ephemeral profile",
+    "route": "http://localhost:5173/#/quota",
+    "viewport": "936x1400",
+    "console_error_count": 0,
+    "request_failure_count": 0,
+    "observed": {
+      "detected_backend": "http://localhost:8317",
+      "heading": "Quota Management",
+      "quota_timeline_visible": true
+    }
+  },
+  "checks": {
+    "required_paths": [
+      "src/utils/connection.ts",
+      "src/features/quota/authFilesRetry.ts",
+      "src/features/quota/constants.ts",
+      "src/features/quota/logic.ts",
+      "src/utils/quota/sidecarFetch.ts",
+      "src/utils/quota/sidecarUrl.ts",
+      "tests/authFilesRetry.test.ts",
+      "tests/connection.test.ts",
+      "tests/quotaSidecarFetch.test.ts",
+      "tests/quotaPageLogic.test.ts",
+      "tests/quotaSidecarResponse.test.ts",
+      "tests/quotaSidecarUrl.test.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/logic.ts",
+        "contains": "Ollama Cloud"
+      },
+      {
+        "path": "src/utils/connection.ts",
+        "contains": "LOCAL_FRONTEND_PORTS"
+      },
+      {
+        "path": "src/features/quota/QuotaPage.tsx",
+        "contains": "authFilesRetryDelayMs"
+      },
+      {
+        "path": "src/utils/quota/constants.ts",
+        "contains": "resolveUsageSidecarUrl"
+      },
+      {
+        "path": "src/utils/quota/sidecarFetch.ts",
+        "contains": "SidecarTimeoutError"
+      }
+    ],
+    "forbidden_text": []
+  }
+}

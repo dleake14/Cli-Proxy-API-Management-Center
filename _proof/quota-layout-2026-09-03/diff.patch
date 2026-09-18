@@ -1,0 +1,521 @@
+diff --git a/src/features/quota/constants.ts b/src/features/quota/constants.ts
+index ca29a05..7a66e4d 100644
+--- a/src/features/quota/constants.ts
++++ b/src/features/quota/constants.ts
+@@ -1,11 +1,12 @@
+ import type { QuotaProviderType } from './providers/types';
+ 
+-/** tab 顺序 = 旧页五分区的纵向顺序，'全部' tab 下卡片也按此分组排列。 */
++/** tab 顺序 = 运营者指定的纵向顺序，'全部' tab 下卡片也按此分组排列。 */
+ export const QUOTA_TAB_ORDER: readonly QuotaProviderType[] = [
+-  'claude',
+-  'antigravity',
+   'codex',
++  'claude',
+   'xai',
++  'antigravity',
++  'ollama',
+   'kimi',
+ ];
+ 
+diff --git a/src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx b/src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx
+index 71dc5e5..7599fbc 100644
+--- a/src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx
++++ b/src/features/quota/providers/antigravity/AntigravityQuotaBody.tsx
+@@ -69,6 +69,11 @@ const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
+ const normalizeAntigravityQuotaText = (value: string): string =>
+   value.trim().toLowerCase().replace(/\s+/g, ' ');
+ 
++const isHiddenAntigravityGroup = (label: string): boolean => {
++  const normalized = normalizeAntigravityQuotaText(label);
++  return normalized.includes('claude') && normalized.includes('gpt');
++};
++
+ const translateAntigravityQuotaLabel = (
+   value: string,
+   keys: Map<string, string>,
+@@ -110,19 +115,23 @@ const getAntigravityPlanLabel = (
+ 
+ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<AntigravityQuotaState>) {
+   const { t } = useTranslation();
+-  const groups = quota.groups ?? [];
++  const groups = quota.groups;
++  const visibleGroups = useMemo(
++    () => groups.filter((group) => !isHiddenAntigravityGroup(group.label)),
++    [groups]
++  );
+   const planLabel = getAntigravityPlanLabel(quota.subscription, t);
+   const normalizedPlan = quota.subscription?.plan?.toLowerCase() ?? '';
+   const isPremiumPlan = normalizedPlan === 'ultra' || normalizedPlan === 'ultra-lite';
+   const serverTimeOffsetMs = quota.serverTimeOffsetMs ?? 0;
+   const resetTimestamps = useMemo(
+     () =>
+-      (quota.groups ?? []).flatMap((group) =>
++      visibleGroups.flatMap((group) =>
+         group.buckets
+           .map((bucket) => (bucket.resetTime ? new Date(bucket.resetTime).getTime() : Number.NaN))
+           .filter(Number.isFinite)
+       ),
+-    [quota.groups]
++    [visibleGroups]
+   );
+   // 首屏直接显示准确文案；后续 effect 会在最近的分钟边界更新并重新排程。
+   const [nowMs, setNowMs] = useState(() => Date.now() + serverTimeOffsetMs);
+@@ -148,8 +157,12 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
+   // Ranked against this provider's own server-corrected clock rather than the
+   // shared one, so the final-hour warning and the countdown always agree.
+   const soonestRowId = useMemo(
+-    () => pickUrgentRowId(collectQuotaRowInstants('antigravity', quota), nowMs),
+-    [quota, nowMs]
++    () =>
++      pickUrgentRowId(
++        collectQuotaRowInstants('antigravity', { ...quota, groups: visibleGroups }),
++        nowMs
++      ),
++    [quota, visibleGroups, nowMs]
+   );
+ 
+   return (
+@@ -164,10 +177,10 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
+           </span>
+         </div>
+       )}
+-      {groups.length === 0 ? (
++      {(groups?.length ?? 0) === 0 ? (
+         <div className={classes.quotaMessage}>{t('antigravity_quota.empty_models')}</div>
+       ) : (
+-        groups.map((group) => {
++        visibleGroups.map((group) => {
+           const groupLabel = translateAntigravityQuotaLabel(
+             group.label,
+             ANTIGRAVITY_GROUP_LABEL_KEYS,
+diff --git a/src/features/quota/providers/codex/CodexQuotaBody.tsx b/src/features/quota/providers/codex/CodexQuotaBody.tsx
+index 8e8d44a..0415788 100644
+--- a/src/features/quota/providers/codex/CodexQuotaBody.tsx
++++ b/src/features/quota/providers/codex/CodexQuotaBody.tsx
+@@ -31,17 +31,32 @@ const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): str
+   return classes.codexPlanValue;
+ };
+ 
++const isHiddenCodexWindow = (window: CodexQuotaState['windows'][number]): boolean => {
++  const searchableText = [window.id, window.label, ...Object.values(window.labelParams ?? {})]
++    .join(' ')
++    .toLowerCase();
++  return searchableText.includes('spark');
++};
++
+ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaState>) {
+   const { t, i18n } = useTranslation();
+   const now = useNow();
+   const locale = i18n.resolvedLanguage;
++  const windows = quota.windows;
++  const visibleWindows = useMemo(
++    () => windows.filter((window) => !isHiddenCodexWindow(window)),
++    [windows]
++  );
+   // Windows and reset credits compete for the same emphasis, but only during
+   // the final hour before the reset or expiry.
+   const soonestRowId = useMemo(
+-    () => pickUrgentRowId(collectQuotaRowInstants('codex', quota), now),
+-    [quota, now]
++    () =>
++      pickUrgentRowId(
++        collectQuotaRowInstants('codex', { ...quota, windows: visibleWindows }),
++        now
++      ),
++    [quota, visibleWindows, now]
+   );
+-  const windows = quota.windows ?? [];
+   const planType = quota.planType ?? null;
+   const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
+   const rateLimitResetCreditsAvailableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
+@@ -152,10 +167,10 @@ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaStat
+           })}
+         </div>
+       ) : null}
+-      {windows.length === 0 ? (
++      {(windows?.length ?? 0) === 0 ? (
+         <div className={classes.quotaMessage}>{t('codex_quota.empty_windows')}</div>
+       ) : (
+-        windows.map((window, index) => {
++        visibleWindows.map((window, index) => {
+           const used = window.usedPercent;
+           const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
+           const remaining =
+diff --git a/src/features/quota/providers/xai/XaiQuotaBody.tsx b/src/features/quota/providers/xai/XaiQuotaBody.tsx
+index c8ca615..42dfefb 100644
+--- a/src/features/quota/providers/xai/XaiQuotaBody.tsx
++++ b/src/features/quota/providers/xai/XaiQuotaBody.tsx
+@@ -1,12 +1,12 @@
+ /**
+  * xAI 额度渲染体：套餐 chip 行（SuperGrok Heavy / 付费档=金卡）、
+- * 周/月账单水位条、按量付费余额。
++ * 周账单水位条、按量付费余额；隐藏 Imagine 与月度 credits 行以保持卡片紧凑。
+  */
+ 
+ import { useMemo } from 'react';
+ import { useTranslation } from 'react-i18next';
+ import type { XaiBillingSummary, XaiQuotaState } from '@/types';
+-import { buildResetDisplay, formatQuotaResetTime, parseIsoToMs } from '@/utils/quota';
++import { buildResetDisplay, formatQuotaResetTime } from '@/utils/quota';
+ import { useNow } from '@/hooks/useNow';
+ import { QuotaMeter } from '../../components/QuotaMeter';
+ import { QuotaResetLabel } from '../../components/QuotaResetLabel';
+@@ -21,17 +21,6 @@ const formatUsdFromCents = (cents: number | null): string => {
+   }).format(cents / 100);
+ };
+ 
+-const formatXaiRemainingAmount = (billing: XaiBillingSummary): string => {
+-  const remainingCents =
+-    billing.monthlyLimitCents !== null && billing.includedUsedCents !== null
+-      ? Math.max(0, billing.monthlyLimitCents - billing.includedUsedCents)
+-      : null;
+-  const remaining = formatUsdFromCents(remainingCents);
+-  const limit = formatUsdFromCents(billing.monthlyLimitCents);
+-  if (billing.monthlyLimitCents === null) return remaining;
+-  return `${remaining} / ${limit}`;
+-};
+-
+ const formatXaiOnDemandAmount = (billing: XaiBillingSummary): string => {
+   const remainingCents =
+     billing.onDemandCapCents !== null && billing.onDemandUsedCents !== null
+@@ -63,6 +52,11 @@ const resolveXaiPlan = (
+   return null;
+ };
+ 
++const isHiddenXaiProductUsage = (product: string): boolean => {
++  const normalized = product.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
++  return normalized.includes('imagine') || normalized.includes('monthly credit');
++};
++
+ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) {
+   const { t, i18n } = useTranslation();
+   // Ahead of the early return below — hooks cannot be conditional.
+@@ -92,20 +86,8 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>)
+     );
+   }
+ 
+-  const clampedUsed =
+-    billing.usedPercent === null ? null : Math.max(0, Math.min(100, billing.usedPercent));
+-  const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
+-  const percentLabel = formatXaiPercent(remaining);
+-  const amountLabel = formatXaiRemainingAmount(billing);
+-  const resetLabel = formatQuotaResetTime(billing.billingPeriodEnd);
+-  // The monthly row is a billing cycle, so it carries no resetAtMs (that field
+-  // is derived from periodEnd, the weekly quota window). Parse for the
+-  // countdown; the summary keeps the two periods deliberately distinct.
+-  const monthlyResetDisplay = buildResetDisplay(
+-    resetLabel,
+-    parseIsoToMs(billing.billingPeriodEnd),
+-    now,
+-    locale
++  const visibleProductUsage = billing.productUsage.filter(
++    (item) => !isHiddenXaiProductUsage(item.product)
+   );
+   const onDemandCap = billing.onDemandCapCents ?? 0;
+   const clampedOnDemandUsed =
+@@ -132,10 +114,6 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>)
+   const hasWeeklyData =
+     billing.periodType === 'weekly' &&
+     (weeklyUsed !== null || Boolean(billing.periodEnd) || billing.productUsage.length > 0);
+-  const hasMonthlyData =
+-    billing.monthlyLimitCents !== null ||
+-    billing.usedCents !== null ||
+-    Boolean(billing.billingPeriodEnd);
+ 
+   return (
+     <>
+@@ -168,7 +146,7 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>)
+           <QuotaMeter percent={weeklyRemaining} classes={classes} index={0} />
+         </div>
+       )}
+-      {billing.productUsage.map((item, index) => {
++      {visibleProductUsage.map((item, index) => {
+         const used =
+           item.usagePercent === null ? null : Math.max(0, Math.min(100, item.usagePercent));
+         const remainingPercent = used === null ? null : Math.max(0, Math.min(100, 100 - used));
+@@ -202,7 +180,7 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>)
+           <QuotaMeter
+             percent={onDemandRemaining}
+             classes={classes}
+-            index={billing.productUsage.length + 1}
++            index={visibleProductUsage.length + 1}
+           />
+         </div>
+       ) : (
+@@ -211,25 +189,6 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>)
+           <span className={classes.codexPlanValue}>{t('xai_quota.pay_as_you_go_disabled')}</span>
+         </div>
+       )}
+-      {hasMonthlyData && (
+-        <div className={classes.quotaRow}>
+-          <div className={classes.quotaRowHeader}>
+-            <span className={classes.quotaModel}>{t('xai_quota.monthly_credits')}</span>
+-            <div className={classes.quotaMeta}>
+-              <span className={classes.quotaPercent}>{percentLabel}</span>
+-              <span className={classes.quotaAmount}>{amountLabel}</span>
+-              {monthlyResetDisplay && (
+-                <QuotaResetLabel display={monthlyResetDisplay} classes={classes} />
+-              )}
+-            </div>
+-          </div>
+-          <QuotaMeter
+-            percent={remaining}
+-            classes={classes}
+-            index={billing.productUsage.length + 2}
+-          />
+-        </div>
+-      )}
+     </>
+   );
+ }
+diff --git a/tests/quotaBodyRendering.test.ts b/tests/quotaBodyRendering.test.ts
+index f56f45b..59a29cf 100644
+--- a/tests/quotaBodyRendering.test.ts
++++ b/tests/quotaBodyRendering.test.ts
+@@ -11,13 +11,21 @@ import { beforeAll, describe, expect, test } from 'bun:test';
+ import { createElement } from 'react';
+ import { renderToStaticMarkup } from 'react-dom/server';
+ import i18n from '@/i18n';
++import { AntigravityQuotaBody } from '@/features/quota/providers/antigravity/AntigravityQuotaBody';
+ import { CodexQuotaBody } from '@/features/quota/providers/codex/CodexQuotaBody';
+ import { ClaudeQuotaBody } from '@/features/quota/providers/claude/ClaudeQuotaBody';
+ import { KimiQuotaBody } from '@/features/quota/providers/kimi/KimiQuotaBody';
++import { XaiQuotaBody } from '@/features/quota/providers/xai/XaiQuotaBody';
+ import { QUOTA_CLASS_KEYS, bindQuotaClasses } from '@/features/quota/types';
+ import { formatInstantShort } from '@/utils/quota';
+ import { DAY_MS, HOUR_MS } from '@/utils/time/durations';
+-import type { ClaudeQuotaState, CodexQuotaState, KimiQuotaState } from '@/types';
++import type {
++  AntigravityQuotaState,
++  ClaudeQuotaState,
++  CodexQuotaState,
++  KimiQuotaState,
++  XaiQuotaState,
++} from '@/types';
+ 
+ const classes = bindQuotaClasses(
+   Object.fromEntries(QUOTA_CLASS_KEYS.map((key) => [key, key])),
+@@ -138,6 +146,31 @@ describe('CodexQuotaBody', () => {
+     expect(markup).toContain('08-02 18:00');
+     expect(markup).not.toContain('quotaResetRelative');
+   });
++
++  test('hides Spark windows while keeping the primary Codex window visible', () => {
++    const markup = renderToStaticMarkup(
++      createElement(CodexQuotaBody, {
++        quota: {
++          ...quota,
++          windows: [
++            ...quota.windows,
++            {
++              id: 'gpt-5-3-codex-spark-weekly-0',
++              label: 'GPT-5.3-Codex-Spark weekly limit',
++              usedPercent: 0,
++              resetLabel: '08-02 19:00',
++              resetAtMs: now + 4 * HOUR_MS,
++              periodHours: 168,
++            },
++          ],
++        },
++        classes,
++      })
++    );
++
++    expect(markup).toContain('5-hour limit');
++    expect(markup).not.toContain('GPT-5.3-Codex-Spark');
++  });
+ });
+ 
+ describe('KimiQuotaBody', () => {
+@@ -197,3 +230,73 @@ describe('ClaudeQuotaBody', () => {
+     expect(markup).toMatch(/4 days/);
+   });
+ });
++
++describe('AntigravityQuotaBody', () => {
++  test('keeps Gemini rows and hides the Claude and GPT group', () => {
++    const quota: AntigravityQuotaState = {
++      status: 'success',
++      groups: [
++        {
++          id: 'gemini',
++          label: 'Gemini models',
++          buckets: [
++            {
++              id: 'gemini-weekly',
++              label: 'Weekly limit',
++              remainingFraction: 0.8,
++            },
++          ],
++        },
++        {
++          id: 'claude-gpt',
++          label: 'Claude and GPT models',
++          buckets: [
++            {
++              id: 'claude-gpt-weekly',
++              label: 'Weekly limit',
++              remainingFraction: 0.7,
++            },
++          ],
++        },
++      ],
++      subscription: null,
++    };
++    const markup = renderToStaticMarkup(createElement(AntigravityQuotaBody, { quota, classes }));
++
++    expect(markup).toContain('Gemini models');
++    expect(markup).not.toContain('Claude and GPT models');
++  });
++});
++
++describe('XaiQuotaBody', () => {
++  test('hides Imagine product usage and monthly credits', () => {
++    const quota: XaiQuotaState = {
++      status: 'success',
++      billing: {
++        mode: 'billing',
++        periodType: 'weekly',
++        usagePercent: 25,
++        periodStart: '2030-08-01T00:00:00Z',
++        periodEnd: '2030-08-08T00:00:00Z',
++        productUsage: [
++          { product: 'Grok', usagePercent: 25 },
++          { product: 'Grok Imagine', usagePercent: 40 },
++        ],
++        monthlyLimitCents: 15000,
++        usedCents: 2500,
++        includedUsedCents: 2500,
++        onDemandCapCents: 10000,
++        onDemandUsedCents: 0,
++        onDemandUsedPercent: 0,
++        billingPeriodStart: '2030-08-01T00:00:00Z',
++        billingPeriodEnd: '2030-09-01T00:00:00Z',
++        usedPercent: 16.67,
++      },
++    };
++    const markup = renderToStaticMarkup(createElement(XaiQuotaBody, { quota, classes }));
++
++    expect(markup).toContain('Grok usage');
++    expect(markup).not.toContain('Grok Imagine usage');
++    expect(markup).not.toContain('Monthly credits');
++  });
++});
+diff --git a/tests/quotaPageLogic.test.ts b/tests/quotaPageLogic.test.ts
+index 2592bbc..3889074 100644
+--- a/tests/quotaPageLogic.test.ts
++++ b/tests/quotaPageLogic.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, test } from 'bun:test';
+-import { QUOTA_PAGE_SIZE } from '@/features/quota/constants';
++import { QUOTA_PAGE_SIZE, QUOTA_TAB_ORDER } from '@/features/quota/constants';
+ import {
+   buildTabCounts,
+   classifyQuotaFiles,
+@@ -35,28 +35,67 @@ describe('resolveQuotaProviderType', () => {
+ });
+ 
+ describe('classifyQuotaFiles', () => {
++  test('uses the requested top-bar provider order', () => {
++    expect(QUOTA_TAB_ORDER).toEqual(['codex', 'claude', 'xai', 'antigravity', 'ollama', 'kimi']);
++  });
++
+   test('drops unsupported and disabled files', () => {
+     const entries = classifyQuotaFiles(FILES);
+     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
+     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
+-    expect(entries).toHaveLength(5);
++    // 5 supported credentials + the virtual Ollama card.
++    expect(entries).toHaveLength(6);
+   });
+ 
+   test('orders entries by provider tab order', () => {
+     const entries = classifyQuotaFiles(FILES);
+-    expect(entries.map((entry) => entry.type)).toEqual(['claude', 'codex', 'codex', 'xai', 'kimi']);
++    expect(entries.map((entry) => entry.type)).toEqual([
++      'codex',
++      'codex',
++      'claude',
++      'xai',
++      'ollama',
++      'kimi',
++    ]);
++  });
++});
++
++describe('classifyQuotaFiles — virtual Ollama card', () => {
++  test('injects Ollama even though the backend can never list it', () => {
++    // CLIProxyAPI has no native Ollama provider, so no auth file is ever returned
++    // for it. The card must still appear, or the panel cannot show Ollama at all.
++    const ollama = classifyQuotaFiles(FILES).filter((entry) => entry.type === 'ollama');
++    expect(ollama).toHaveLength(1);
++    expect(ollama[0].file.name).toBe('Ollama Cloud');
++    expect(ollama[0].file.disabled).toBe(false);
++  });
++
++  test('stays out of the way when a real ollama credential exists (no duplicate card)', () => {
++    const entries = classifyQuotaFiles([...FILES, file('ollama-key.json', 'ollama')]);
++    const names = entries.filter((entry) => entry.type === 'ollama').map((entry) => entry.file.name);
++    expect(names).toEqual(['ollama-key.json']);
++  });
++
++  test('is refreshable like any other card, not a disabled placeholder', () => {
++    const entry = classifyQuotaFiles(FILES).find((item) => item.type === 'ollama');
++    expect(entry).toBeDefined();
++    // The card's refresh affordance is gated on `file.disabled` only, so an
++    // enabled synthetic entry stays clickable exactly like a real credential.
++    expect(entry?.file.disabled).toBe(false);
++    expect(isQuotaRefreshDisabled(!entry?.file.disabled, false, false)).toBe(false);
+   });
+ });
+ 
+ describe('buildTabCounts', () => {
+   test('counts per provider plus an all total, zero-filling empty tabs', () => {
+     expect(buildTabCounts(classifyQuotaFiles(FILES))).toEqual({
+-      all: 5,
++      all: 6,
+       claude: 1,
+       antigravity: 0,
+       codex: 2,
+       xai: 1,
+       kimi: 1,
++      ollama: 1,
+     });
+   });
+ });
+@@ -65,7 +104,13 @@ describe('filterEntriesByTab', () => {
+   const entries = classifyQuotaFiles(FILES);
+ 
+   test("passes everything through on the 'all' tab", () => {
+-    expect(filterEntriesByTab(entries, 'all')).toHaveLength(5);
++    expect(filterEntriesByTab(entries, 'all')).toHaveLength(6);
++  });
++
++  test('isolates the virtual Ollama card on its own tab', () => {
++    expect(filterEntriesByTab(entries, 'ollama').map((entry) => entry.file.name)).toEqual([
++      'Ollama Cloud',
++    ]);
+   });
+ 
+   test('filters to a single provider', () => {
+@@ -143,6 +188,7 @@ describe('sortQuotaEntries', () => {
+       'kimi-a.json',
+       'codex-a.json',
+       'codex-b.json',
++      'Ollama Cloud',
+     ]);
+   });
+ 
+@@ -157,9 +203,10 @@ describe('sortQuotaEntries', () => {
+       'kimi-a.json',
+       'codex-b.json',
+       // unresolved tail, in the order classifyQuotaFiles produced
+-      'claude-a.json',
+       'codex-a.json',
++      'claude-a.json',
+       'grok-a.json',
++      'Ollama Cloud',
+     ]);
+   });
+ 

@@ -1,0 +1,823 @@
+diff --git a/quota/cdp_scrape.py b/quota/cdp_scrape.py
+index 71530a7..801c9d0 100644
+--- a/quota/cdp_scrape.py
++++ b/quota/cdp_scrape.py
+@@ -32,6 +32,7 @@ from .store import QuotaStore
+ DEFAULT_PORT = 19222
+ DEFAULT_JSONL = ROOT / "data" / "usg2-cdp.jsonl"
+ INNER_TEXT_CAP = 8000
++DEFAULT_META_USAGE_URL = "https://dev.meta.ai/usage/"
+ 
+ TARGETS: tuple[tuple[str, str, str, str], ...] = (
+     # url_substr, provider, window, metric (used_pct | remaining_pct)
+@@ -103,19 +104,43 @@ def discover(port: int = DEFAULT_PORT) -> tuple[str, list[dict[str, Any]]]:
+     fallback.
+     """
+     errors: list[str] = []
+-    fallback: tuple[str, list[dict[str, Any]]] | None = None
++    responders: list[tuple[str, list[dict[str, Any]]]] = []
+     for base in cdp_endpoints(port):
+         try:
+             pages = fetch_targets(base)
+         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+             errors.append(f"{base}: {exc}")
+             continue
+-        if any(match_target(str(page.get("url") or "")) for page in pages):
++        responders.append((base, pages))
++        if any(
++            match_target(str(page.get("url") or "")) == ("meta", "weekly", "used_pct")
++            for page in pages
++        ):
+             return base, pages
+-        if fallback is None:
+-            fallback = (base, pages)
+-    if fallback is not None:
+-        return fallback
++    # Two Chrome profiles can legitimately bind the same port on different
++    # loopback families. Prefer the visible USG2 process (the responder with a
++    # Meta page and the fuller tab set) over a stale headless profile or an
++    # unrelated responder that merely has an Ollama page.
++    meta_responders = [
++        responder
++        for responder in responders
++        if any(
++            urlparse(str(page.get("url") or "")).hostname
++            in {"dev.meta.ai", "meta.ai", "www.meta.ai"}
++            for page in responder[1]
++        )
++    ]
++    if meta_responders:
++        return max(meta_responders, key=lambda responder: len(responder[1]))
++    target_responders = [
++        responder
++        for responder in responders
++        if any(match_target(str(page.get("url") or "")) for page in responder[1])
++    ]
++    if target_responders:
++        return max(target_responders, key=lambda responder: len(responder[1]))
++    if responders:
++        return responders[0]
+     raise RuntimeError(
+         "CDP not reachable on "
+         + ", ".join(cdp_endpoints(port))
+@@ -294,6 +319,119 @@ def reload_target(ws_url: str, timeout: float = 6.0) -> None:
+     time.sleep(0.2)
+ 
+ 
++def navigate_target(ws_url: str, url: str, timeout: float = 8.0) -> None:
++    """Navigate an existing CDP page and wait briefly for its document."""
++    ws = _Ws(ws_url, timeout=timeout)
++    try:
++        ws.send_text(json.dumps({"id": 1, "method": "Page.enable"}))
++        ws.send_text(
++            json.dumps({"id": 2, "method": "Page.navigate", "params": {"url": url}})
++        )
++        deadline = time.time() + timeout
++        while time.time() < deadline:
++            reply = json.loads(ws.recv_text())
++            if reply.get("id") == 2 and reply.get("error"):
++                raise RuntimeError(str(reply["error"]))
++            if reply.get("method") == "Page.loadEventFired":
++                break
++    finally:
++        ws.close()
++    time.sleep(0.5)
++
++
++def configured_meta_usage_url() -> str:
++    """Return the saved USG2 Muse usage URL without trusting arbitrary input."""
++    configured = os.environ.get("USG2_META_USAGE_URL", "").strip()
++    candidates = [configured] if configured else []
++    candidates.extend(
++        [
++            ROOT.parent / "chrome-scut" / "configs" / "usg2.json",
++            Path("/mnt/c/CODE/chrome-scut/configs/usg2.json"),
++        ]
++    )
++    for candidate in candidates:
++        url = ""
++        if isinstance(candidate, Path):
++            try:
++                config = json.loads(candidate.read_text(encoding="utf-8-sig"))
++                url = next(
++                    str(tab.get("url") or "")
++                    for window in config.get("windows", [])
++                    if isinstance(window, dict)
++                    for tab in window.get("tabs", [])
++                    if isinstance(tab, dict)
++                    and urlparse(str(tab.get("url") or "")).hostname == "dev.meta.ai"
++                    and urlparse(str(tab.get("url") or "")).path.rstrip("/") == "/usage"
++                )
++            except (OSError, ValueError, StopIteration, TypeError):
++                continue
++        else:
++            url = str(candidate)
++        parsed = urlparse(url)
++        if (
++            parsed.scheme == "https"
++            and parsed.hostname == "dev.meta.ai"
++            and parsed.path.rstrip("/") == "/usage"
++        ):
++            return url
++    return DEFAULT_META_USAGE_URL
++
++
++def restore_meta_usage_page(
++    base: str, pages: list[dict[str, Any]]
++) -> tuple[list[dict[str, Any]], bool, str | None]:
++    """Put a drifted dedicated Meta tab back on the saved usage route.
++
++    The profile on CDP 19222 exists only for USG2 Meta/Ollama tracking. Meta
++    sometimes redirects its app window to a generic Muse screen; leaving that
++    tab there silently freezes the sidecar. Reuse the authenticated page
++    instead of opening another browser or copying credentials.
++    """
++    if any(
++        match_target(str(page.get("url") or "")) == ("meta", "weekly", "used_pct")
++        for page in pages
++    ):
++        return pages, False, None
++    meta_hosts = {"dev.meta.ai", "meta.ai", "www.meta.ai"}
++    candidate = next(
++        (
++            page
++            for page in pages
++            if urlparse(str(page.get("url") or "")).hostname in meta_hosts
++            and page.get("webSocketDebuggerUrl")
++        ),
++        None,
++    )
++    if candidate is None:
++        return pages, False, None
++    ws_url = str(candidate["webSocketDebuggerUrl"])
++    parsed_base = urlparse(base)
++    if parsed_base.hostname and parsed_base.hostname not in ("127.0.0.1", "localhost"):
++        base_host = _url_host(parsed_base.hostname)
++        ws_url = ws_url.replace("127.0.0.1", base_host).replace("localhost", base_host)
++    try:
++        if restore_meta_usage_via_controls(ws_url):
++            refreshed = fetch_targets(base)
++            if any(
++                match_target(str(page.get("url") or ""))
++                == ("meta", "weekly", "used_pct")
++                for page in refreshed
++            ):
++                return refreshed, True, None
++    except Exception:  # noqa: BLE001
++        pass
++    try:
++        navigate_target(ws_url, configured_meta_usage_url())
++        refreshed = fetch_targets(base)
++    except Exception as exc:  # noqa: BLE001
++        return pages, False, str(exc)
++    restored = any(
++        match_target(str(page.get("url") or "")) == ("meta", "weekly", "used_pct")
++        for page in refreshed
++    )
++    return refreshed, restored, None if restored else "Meta tab did not remain on the usage route"
++
++
+ def match_target(url: str) -> tuple[str, str, str] | None:
+     low = (url or "").lower()
+     for needle, provider, window, metric in TARGETS:
+@@ -340,14 +478,85 @@ def parse_meta_meters(text: str) -> list[tuple[str, str, float]]:
+     return out
+ 
+ 
++def read_page_text(ws_url: str) -> str:
++    text = runtime_evaluate(ws_url, "document.body ? document.body.innerText : ''")
++    return text if isinstance(text, str) else str(text or "")
++
++
++def click_page_control(ws_url: str, label: str, selector: str) -> bool:
++    """Click one exact visible-label/aria-label control through the existing tab."""
++    expression = f"""
++(() => {{
++  const wanted = {json.dumps(label.casefold())};
++  const element = [...document.querySelectorAll({json.dumps(selector)})].find((item) => {{
++    const text = (item.innerText || item.getAttribute('aria-label') || '').trim().toLowerCase();
++    return text === wanted;
++  }});
++  if (!element) return false;
++  element.click();
++  return true;
++}})()
++"""
++    return runtime_evaluate(ws_url, expression) is True
++
++
++def restore_meta_usage_via_controls(ws_url: str) -> bool:
++    """Replay Meta's reliable in-app route: Start building -> menu -> Usage."""
++    started = click_page_control(ws_url, "Start building", "a,button,[role='button']")
++    if started:
++        time.sleep(0.8)
++    opened = click_page_control(
++        ws_url, "Open navigation", "button,[role='button']"
++    )
++    if opened:
++        time.sleep(0.2)
++    clicked = click_page_control(ws_url, "Usage", "a,[role='menuitem']")
++    if clicked:
++        time.sleep(1.0)
++    return clicked
++
++
++def ensure_meta_usage_view(ws_url: str) -> tuple[str, bool, str | None]:
++    """Read Meta without a blind reload; navigate only when meter content drifted."""
++    text = read_page_text(ws_url)
++    if parse_meta_meters(text):
++        return text, False, None
++    try:
++        if restore_meta_usage_via_controls(ws_url):
++            text = read_page_text(ws_url)
++            if parse_meta_meters(text):
++                return text, True, None
++    except Exception:  # noqa: BLE001
++        pass
++    try:
++        navigate_target(ws_url, configured_meta_usage_url())
++        text = read_page_text(ws_url)
++    except Exception as exc:  # noqa: BLE001
++        return text, False, str(exc)
++    if parse_meta_meters(text):
++        return text, True, None
++    landing = "your next build" in text.lower() and "starts with muse" in text.lower()
++    return (
++        text,
++        False,
++        (
++            "Meta usage route rendered the public Muse landing page; sign in again."
++            if landing
++            else "Meta usage route has no High Usage meters."
++        ),
++    )
++
++
+ def scrape_once(
+     *,
+     port: int = DEFAULT_PORT,
+     jsonl_path: Path | None = None,
+     record: bool = True,
+     store: QuotaStore | None = None,
++    target_provider: str | None = None,
+ ) -> dict[str, Any]:
+     base, pages = discover(port)
++    pages, meta_usage_restored, meta_restore_error = restore_meta_usage_page(base, pages)
+     jsonl_path = jsonl_path or DEFAULT_JSONL
+     jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+     when = _utc_now().isoformat().replace("+00:00", "Z")
+@@ -378,19 +587,22 @@ def scrape_once(
+                 "localhost", base_host
+             )
+         provider, window, metric = mapped
+-        # Force live numbers before the read; a failed reload must not lose the
+-        # reading, so failure falls through to whatever the page has.
+-        try:
+-            reload_target(str(ws_url))
+-        except Exception:  # noqa: BLE001
+-            pass
++        if target_provider is not None and provider != target_provider:
++            continue
+         try:
+-            text = runtime_evaluate(
+-                str(ws_url),
+-                "document.body ? document.body.innerText : ''",
+-            )
+-            if not isinstance(text, str):
+-                text = str(text or "")
++            if provider == "meta":
++                text, content_restored, content_error = ensure_meta_usage_view(str(ws_url))
++                meta_usage_restored = meta_usage_restored or content_restored
++                if content_error:
++                    meta_restore_error = content_error
++            else:
++                # Non-Meta background tabs can throttle their own refresh
++                # timers, so keep the established reload-before-read behavior.
++                try:
++                    reload_target(str(ws_url))
++                except Exception:  # noqa: BLE001
++                    pass
++                text = read_page_text(str(ws_url))
+         except Exception as exc:  # noqa: BLE001
+             hits.append(
+                 {
+@@ -429,6 +641,9 @@ def scrape_once(
+                 re.I,
+             )
+             row["error"] = (
++                meta_restore_error
++                if meta_restore_error
++                else
+                 "Meta High Usage page shows an upgrade/limit state with no meter percent; "
+                 "resolve the plan state, then re-run the scrape."
+                 if blocked
+@@ -493,9 +708,12 @@ def scrape_once(
+         "pages_listed": len(pages),
+         "matched": len(hits),
+         "recorded": len(recorded),
++        "meta_usage_restored": meta_usage_restored,
+         "jsonl": str(jsonl_path),
+         "hits": hits,
+     }
++    if meta_restore_error:
++        result["meta_restore_error"] = meta_restore_error
+     if store_error:
+         result["store_error"] = store_error
+     return result
+@@ -506,6 +724,11 @@ def build_parser() -> argparse.ArgumentParser:
+     p.add_argument("--port", type=int, default=DEFAULT_PORT)
+     p.add_argument("--jsonl", type=Path, default=DEFAULT_JSONL)
+     p.add_argument("--dry-run", action="store_true", help="do not write quota.sqlite3")
++    p.add_argument(
++        "--provider",
++        choices=sorted({target[1] for target in TARGETS}),
++        help="scrape only one provider",
++    )
+     p.add_argument("--json", action="store_true")
+     return p
+ 
+@@ -517,6 +740,7 @@ def main(argv: list[str] | None = None) -> int:
+             port=args.port,
+             jsonl_path=args.jsonl,
+             record=not args.dry_run,
++            target_provider=args.provider,
+         )
+     except Exception as exc:  # noqa: BLE001
+         payload = {"ok": False, "error": str(exc)}
+diff --git a/quota/cli.py b/quota/cli.py
+index 91085ca..4623a27 100644
+--- a/quota/cli.py
++++ b/quota/cli.py
+@@ -70,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
+     )
+     s.add_argument("--port", type=int, default=19222)
+     s.add_argument("--dry-run", action="store_true", help="JSONL only; skip quota.sqlite3")
++    s.add_argument(
++        "--provider",
++        choices=("claude", "grok_build", "ollama", "codex", "cursor", "meta"),
++        help="scrape only one provider",
++    )
+     s.add_argument("--json", action="store_true")
+ 
+     r = sub.add_parser("route", help="which_worker_now policy + live quota gate")
+@@ -153,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
+         from .cdp_scrape import scrape_once
+ 
+         try:
+-            result = scrape_once(port=args.port, record=not args.dry_run)
++            result = scrape_once(
++                port=args.port,
++                record=not args.dry_run,
++                target_provider=args.provider,
++            )
+         except Exception as exc:  # noqa: BLE001
+             print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
+             return 1
+diff --git a/quota/muse_subscription.py b/quota/muse_subscription.py
+index a4d06ff..e68ae9f 100644
+--- a/quota/muse_subscription.py
++++ b/quota/muse_subscription.py
+@@ -71,7 +71,10 @@ def _refresh_reading(payload: dict, *, now: datetime | None = None) -> dict | No
+         return None  # the weekly window rolled after this reading
+     if age_hours > MUSE_WEEKLY_HOURS:
+         return None
+-    stale = age_hours > MUSE_SESSION_HOURS
++    # A failed watchdog refresh can explicitly invalidate a recent-looking
++    # sidecar. Never overwrite that transport truth merely because fetched_at
++    # is still within the rolling session window.
++    stale = bool(payload.get("stale")) or age_hours > MUSE_SESSION_HOURS
+     windows = []
+     for win in payload.get("windows") or []:
+         if not isinstance(win, dict):
+@@ -107,6 +110,53 @@ def _from_sidecar(*, now: datetime | None = None) -> dict | None:
+     return _refresh_reading(payload, now=now)
+ 
+ 
++def record_sidecar(*, db_path=None, now: datetime | None = None) -> int:
++    """Record the sidecar's windows into the quota store from its native owner.
++
++    The Windows CDP scrape writes data/muse-usage.json but cannot write the
++    SQLite store (it fails with "database is locked" over the WSL UNC path), so
++    the WSL-side owner records the reading. Idempotent per fetched_at: reruns
++    with the same scrape add nothing.
++    """
++    payload = _from_sidecar(now=now)
++    if payload is None:
++        return 0
++    fetched_at = str(payload.get("fetched_at") or "")
++    try:
++        store = QuotaStore(db_path=db_path)
++    except Exception:  # noqa: BLE001
++        return 0
++    newest: dict[str, str] = {}
++    for row in store.latest_readings(provider="meta", limit_per_pair=1):
++        newest[str(row["window"])] = str(row["read_at"])
++    recorded = 0
++    for win in payload.get("windows") or []:
++        if not isinstance(win, dict):
++            continue
++        window_id = str(win.get("id") or "weekly")
++        used = win.get("used")
++        if used is None and win.get("remaining") is not None:
++            used = 100.0 - float(win["remaining"])
++        if used is None:
++            continue
++        value = float(used)
++        if value < 0.0 or value > 100.0:
++            continue
++        if newest.get(window_id) == fetched_at:
++            continue
++        store.record(
++            "meta",
++            window=window_id,
++            used=value,
++            method="browser",
++            note=f"usg2 CDP meta {window_id} used_pct",
++            source_ref="usg2-cdp",
++            read_at=fetched_at or None,
++        )
++        recorded += 1
++    return recorded
++
++
+ def panel_snapshot(*, timeout: int = 8, db_path=None) -> dict:  # noqa: ARG001
+     sidecar = _from_sidecar()
+     if sidecar is not None:
+diff --git a/scripts/refresh_muse_quota.py b/scripts/refresh_muse_quota.py
+index 785c451..9fa60ca 100755
+--- a/scripts/refresh_muse_quota.py
++++ b/scripts/refresh_muse_quota.py
+@@ -57,6 +57,26 @@ def age_seconds(payload: dict | None, now: datetime) -> float | None:
+     return max(0.0, (now - fetched).total_seconds())
+ 
+ 
++def mark_sidecar_stale(payload: dict, reason: str, now: datetime) -> bool:
++    """Invalidate a reading immediately when its browser source cannot refresh."""
++    stale = dict(payload)
++    stale["live"] = False
++    stale["stale"] = True
++    stale["refresh_error"] = reason
++    stale["checked_at"] = now.isoformat(timespec="seconds")
++    temporary = SIDECAR.with_suffix(".json.tmp")
++    try:
++        temporary.write_text(json.dumps(stale, indent=2) + "\n", encoding="utf-8")
++        temporary.replace(SIDECAR)
++    except OSError:
++        try:
++            temporary.unlink(missing_ok=True)
++        except OSError:
++            pass
++        return False
++    return True
++
++
+ def run_scrape() -> dict:
+     """Run one scrape and return its own report, not just its exit status.
+ 
+@@ -67,7 +87,7 @@ def run_scrape() -> dict:
+     """
+     try:
+         result = subprocess.run(
+-            ["bash", str(SCRAPE)],
++            ["bash", str(SCRAPE), "--dry-run", "--provider", "meta"],
+             cwd=ROOT,
+             capture_output=True,
+             text=True,
+@@ -152,6 +172,7 @@ def main() -> int:
+         else:
+             summary["error"] = "sidecar reading did not advance"
+         summary["scrape"] = scrape
++        summary["marked_stale"] = mark_sidecar_stale(payload, summary["error"], now)
+     try:
+         summary["recorded"] = ingest(payload)
+     except Exception as exc:  # noqa: BLE001
+diff --git a/tests_py/test_cursor_muse_quota.py b/tests_py/test_cursor_muse_quota.py
+index e5aa3a4..8ad3800 100644
+--- a/tests_py/test_cursor_muse_quota.py
++++ b/tests_py/test_cursor_muse_quota.py
+@@ -5,11 +5,13 @@ from __future__ import annotations
+ import json
+ import tempfile
+ import unittest
+-from datetime import datetime, timezone
++from datetime import datetime, timedelta, timezone
+ from pathlib import Path
+ from unittest import mock
+ 
+-from quota.cursor_usage import parse_usage
++from quota.cursor_usage import parse_usage, sync_window_bounds
++from quota.store import QuotaStore
++from quota.windows import parse_iso
+ from quota import muse_subscription as muse
+ from quota.muse_subscription import UNAVAILABLE, load_auth, panel_snapshot as muse_snapshot
+ 
+@@ -40,6 +42,26 @@ class CursorParseTests(unittest.TestCase):
+         self.assertEqual(parsed["reset_at_ms"], 1789814841000)
+         self.assertIsNone(parse_usage({})["auto_used_pct"])
+ 
++    def test_billing_cycle_end_anchors_every_cursor_pool(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            store = QuotaStore(db_path=Path(temp_dir) / "quota.sqlite3")
++            sync_window_bounds(store, {"reset_at_ms": 1789814841000})
++            rows = {
++                row["window"]: row
++                for row in store.list_windows()
++                if row["provider"] == "cursor"
++            }
++
++        self.assertEqual(set(rows), {"session", "weekly", "monthly"})
++        for row in rows.values():
++            self.assertEqual(row["source"], "api")
++            start = parse_iso(row["last_reset_at"])
++            end = parse_iso(row["next_reset_at"])
++            self.assertIsNotNone(start)
++            self.assertIsNotNone(end)
++            assert start is not None and end is not None
++            self.assertEqual(end - start, timedelta(hours=720))
++
+ 
+ class MuseFailClosedTests(unittest.TestCase):
+     def test_snapshot_never_invents_windows(self) -> None:
+@@ -67,14 +89,14 @@ class MuseSidecarFreshnessTests(unittest.TestCase):
+         patcher.start()
+         self.addCleanup(patcher.stop)
+ 
+-    def _write(self, fetched_at: str | None) -> None:
++    def _write(self, fetched_at: str | None, *, stale: bool = False) -> None:
+         self.path.write_text(
+             json.dumps(
+                 {
+                     "ok": True,
+                     "source": "usg2-cdp",
+-                    "live": True,
+-                    "stale": False,
++                    "live": not stale,
++                    "stale": stale,
+                     "plan": "High Usage",
+                     "signed_in": True,
+                     "fetched_at": fetched_at,
+@@ -122,6 +144,14 @@ class MuseSidecarFreshnessTests(unittest.TestCase):
+         self.assertTrue(rolled["stale"])
+         self.assertEqual([w["id"] for w in rolled["windows"]], ["weekly"])
+ 
++    def test_declared_stale_reading_stays_stale_even_when_recent(self) -> None:
++        self._write("2026-09-14T13:30:00Z", stale=True)
++        stale = muse._from_sidecar(now=NOW_AFTER_RESET)
++        self.assertIsNotNone(stale)
++        assert stale is not None
++        self.assertFalse(stale["live"])
++        self.assertTrue(stale["stale"])
++
+     def test_undated_reading_is_dropped(self) -> None:
+         self._write(None)
+         self.assertIsNone(muse._from_sidecar(now=NOW_AFTER_RESET))
+diff --git a/tests_py/test_quota_cli.py b/tests_py/test_quota_cli.py
+index 461457e..c7fe61c 100644
+--- a/tests_py/test_quota_cli.py
++++ b/tests_py/test_quota_cli.py
+@@ -19,9 +19,18 @@ class QuotaCliReadOnlyFetchTests(unittest.TestCase):
+             result = main(["scrape-usg2", "--dry-run", "--json"])
+ 
+         self.assertEqual(result, 0)
+-        scrape.assert_called_once_with(port=19222, record=False)
++        scrape.assert_called_once_with(port=19222, record=False, target_provider=None)
+         self.assertIn('"ok": true', output.getvalue())
+ 
++    def test_usg2_provider_filter_is_forwarded(self) -> None:
++        with patch(
++            "quota.cdp_scrape.scrape_once", return_value={"ok": True, "recorded": 0}
++        ) as scrape:
++            result = main(["scrape-usg2", "--dry-run", "--provider", "meta"])
++
++        self.assertEqual(result, 0)
++        scrape.assert_called_once_with(port=19222, record=False, target_provider="meta")
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests_py/test_quota_resets.py b/tests_py/test_quota_resets.py
+index db56080..8fc458f 100755
+--- a/tests_py/test_quota_resets.py
++++ b/tests_py/test_quota_resets.py
+@@ -64,15 +64,15 @@ class ProviderResetTest(unittest.TestCase):
+ 
+ 
+ PAYLOAD = {
+-    "five_hour": {"utilization": 5.0, "resets_at": "2026-09-13T21:20:00+00:00"},
+-    "seven_day": {"utilization": 20.0, "resets_at": "2026-09-16T07:00:00+00:00"},
++    "five_hour": {"utilization": 5.0, "resets_at": "2099-09-13T21:20:00+00:00"},
++    "seven_day": {"utilization": 20.0, "resets_at": "2099-09-16T07:00:00+00:00"},
+     "limits": [
+-        {"kind": "session", "percent": 5, "resets_at": "2026-09-13T21:20:00+00:00"},
+-        {"kind": "weekly_all", "percent": 20, "resets_at": "2026-09-16T07:00:00+00:00"},
++        {"kind": "session", "percent": 5, "resets_at": "2099-09-13T21:20:00+00:00"},
++        {"kind": "weekly_all", "percent": 20, "resets_at": "2099-09-16T07:00:00+00:00"},
+         {
+             "kind": "weekly_scoped",
+             "percent": 15,
+-            "resets_at": "2026-09-16T07:00:00+00:00",
++            "resets_at": "2099-09-16T07:00:00+00:00",
+             "scope": {"model": {"id": None, "display_name": "Fable"}},
+         },
+     ],
+@@ -135,7 +135,7 @@ class ClaudeRefreshTest(unittest.TestCase):
+ 
+         sess = store.get_window("claude", "session") or {}
+         self.assertEqual(sess.get("source"), "api")
+-        self.assertEqual(sess.get("next_reset_at"), "2026-09-13T21:20:00Z")
++        self.assertEqual(sess.get("next_reset_at"), "2099-09-13T21:20:00Z")
+ 
+ 
+ class ForecastWindowTest(unittest.TestCase):
+diff --git a/tests_py/test_usg2_cdp.py b/tests_py/test_usg2_cdp.py
+index be65150..820940a 100644
+--- a/tests_py/test_usg2_cdp.py
++++ b/tests_py/test_usg2_cdp.py
+@@ -1,3 +1,4 @@
++from quota import cdp_scrape
+ from quota.cdp_scrape import match_target, parse_first_pct, parse_meta_meters
+ 
+ 
+@@ -26,3 +27,143 @@ def test_parse_meta_current_and_weekly():
+         ("session", "used_pct", 10.0),
+         ("weekly", "used_pct", 66.0),
+     ]
++
++
++def test_match_meta_requires_usage_path():
++    assert match_target("https://dev.meta.ai/usage/?project_id=1")[0] == "meta"
++    # The API dashboard has no High Usage meters; it must not match.
++    assert match_target("https://dev.meta.ai/?team_id=1&project_id=2") is None
++    assert match_target("https://meta.ai/") is None
++
++
++def test_parse_meta_upgrade_banner_stays_empty():
++    # An upgrade/limit banner carries no percent: fail closed, never invent one.
++    assert parse_meta_meters("Weekly limit reached. Upgrade your plan for more High Usage.") == []
++
++
++def test_restore_drifted_meta_page_reuses_authenticated_cdp_tab(monkeypatch):
++    drifted = [
++        {
++            "url": "https://www.meta.ai/",
++            "webSocketDebuggerUrl": "ws://127.0.0.1:19222/devtools/page/meta",
++        },
++        {
++            "url": "https://ollama.com/settings",
++            "webSocketDebuggerUrl": "ws://127.0.0.1:19222/devtools/page/ollama",
++        },
++    ]
++    restored_pages = [
++        {
++            "url": "https://dev.meta.ai/usage?team_id=1&project_id=2",
++            "webSocketDebuggerUrl": "ws://127.0.0.1:19222/devtools/page/meta",
++        }
++    ]
++    navigations = []
++    monkeypatch.setattr(
++        cdp_scrape, "configured_meta_usage_url", lambda: "https://dev.meta.ai/usage?project_id=2"
++    )
++    monkeypatch.setattr(
++        cdp_scrape, "navigate_target", lambda ws_url, url: navigations.append((ws_url, url))
++    )
++    monkeypatch.setattr(cdp_scrape, "restore_meta_usage_via_controls", lambda ws_url: False)
++    monkeypatch.setattr(cdp_scrape, "fetch_targets", lambda base: restored_pages)
++
++    pages, restored, error = cdp_scrape.restore_meta_usage_page(
++        "http://127.0.0.1:19222", drifted
++    )
++
++    assert restored is True
++    assert error is None
++    assert pages == restored_pages
++    assert navigations == [
++        (
++            "ws://127.0.0.1:19222/devtools/page/meta",
++            "https://dev.meta.ai/usage?project_id=2",
++        )
++    ]
++
++
++def test_discover_prefers_visible_drifted_meta_profile_over_other_targets(monkeypatch):
++    pages_by_base = {
++        "http://127.0.0.1:19222": [
++            {"url": "https://dev.meta.ai/", "webSocketDebuggerUrl": "ws://v4/meta"}
++        ],
++        "http://[::1]:19222": [
++            {"url": "https://dev.meta.ai/", "webSocketDebuggerUrl": "ws://v6/meta"},
++            {"url": "https://ollama.com/settings", "webSocketDebuggerUrl": "ws://v6/ollama"},
++        ],
++    }
++    monkeypatch.setattr(
++        cdp_scrape, "cdp_endpoints", lambda port: list(pages_by_base)
++    )
++    monkeypatch.setattr(
++        cdp_scrape, "fetch_targets", lambda base: pages_by_base[base]
++    )
++
++    base, pages = cdp_scrape.discover()
++
++    assert base == "http://[::1]:19222"
++    assert len(pages) == 2
++
++
++def test_content_aware_restore_navigates_landing_without_reloading(monkeypatch):
++    landing = "Your next build\nstarts with Muse."
++    usage = "Current usage 4% used\nWeekly limit 7% used"
++    reads = iter([landing, usage])
++    navigations = []
++    monkeypatch.setattr(cdp_scrape, "read_page_text", lambda ws_url: next(reads))
++    monkeypatch.setattr(
++        cdp_scrape, "configured_meta_usage_url", lambda: "https://dev.meta.ai/usage?project_id=2"
++    )
++    monkeypatch.setattr(cdp_scrape, "restore_meta_usage_via_controls", lambda ws_url: False)
++    monkeypatch.setattr(
++        cdp_scrape, "navigate_target", lambda ws_url, url: navigations.append((ws_url, url))
++    )
++
++    text, restored, error = cdp_scrape.ensure_meta_usage_view("ws://meta")
++
++    assert text == usage
++    assert restored is True
++    assert error is None
++    assert navigations == [("ws://meta", "https://dev.meta.ai/usage?project_id=2")]
++
++
++def test_content_aware_restore_leaves_working_usage_view_untouched(monkeypatch):
++    usage = "Current usage 4% used\nWeekly limit 7% used"
++    monkeypatch.setattr(cdp_scrape, "read_page_text", lambda ws_url: usage)
++    monkeypatch.setattr(
++        cdp_scrape,
++        "navigate_target",
++        lambda *args: (_ for _ in ()).throw(AssertionError("unexpected navigation")),
++    )
++
++    text, restored, error = cdp_scrape.ensure_meta_usage_view("ws://meta")
++
++    assert text == usage
++    assert restored is False
++    assert error is None
++
++
++def test_content_aware_restore_prefers_in_app_usage_controls(monkeypatch):
++    landing = "Your next build\nstarts with Muse."
++    usage = "Current usage 4% used\nWeekly limit 7% used"
++    reads = iter([landing, usage])
++    control_calls = []
++    monkeypatch.setattr(cdp_scrape, "read_page_text", lambda ws_url: next(reads))
++    monkeypatch.setattr(
++        cdp_scrape,
++        "restore_meta_usage_via_controls",
++        lambda ws_url: control_calls.append(ws_url) or True,
++    )
++    monkeypatch.setattr(
++        cdp_scrape,
++        "navigate_target",
++        lambda *args: (_ for _ in ()).throw(AssertionError("fallback navigation used")),
++    )
++
++    text, restored, error = cdp_scrape.ensure_meta_usage_view("ws://meta")
++
++    assert text == usage
++    assert restored is True
++    assert error is None
++    assert control_calls == ["ws://meta"]
+diff --git a/tests_py/test_refresh_muse_quota.py b/tests_py/test_refresh_muse_quota.py
+new file mode 100644
+index 0000000..73fe9cd
+--- /dev/null
++++ b/tests_py/test_refresh_muse_quota.py
+@@ -0,0 +1,33 @@
++import importlib.util
++import json
++from datetime import datetime, timezone
++from pathlib import Path
++
++
++SCRIPT = Path(__file__).parents[1] / "scripts" / "refresh_muse_quota.py"
++SPEC = importlib.util.spec_from_file_location("refresh_muse_quota", SCRIPT)
++assert SPEC and SPEC.loader
++refresh_muse_quota = importlib.util.module_from_spec(SPEC)
++SPEC.loader.exec_module(refresh_muse_quota)
++
++
++def test_failed_refresh_marks_existing_sidecar_stale(tmp_path, monkeypatch):
++    sidecar = tmp_path / "muse-usage.json"
++    monkeypatch.setattr(refresh_muse_quota, "SIDECAR", sidecar)
++    now = datetime(2026, 9, 18, 12, 0, tzinfo=timezone.utc)
++    payload = {
++        "ok": True,
++        "live": True,
++        "stale": False,
++        "fetched_at": "2026-09-18T11:55:00Z",
++        "windows": [{"id": "weekly", "used": 7.0, "limit": 100}],
++    }
++
++    assert refresh_muse_quota.mark_sidecar_stale(payload, "signed out", now)
++
++    stored = json.loads(sidecar.read_text())
++    assert stored["ok"] is True
++    assert stored["live"] is False
++    assert stored["stale"] is True
++    assert stored["refresh_error"] == "signed out"
++    assert payload["stale"] is False

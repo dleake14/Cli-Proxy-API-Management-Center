@@ -1,0 +1,7 @@
+launcher: /home/david/projects/chrome-scut/cpamc-launch.ps1
+chain: C:\Users\David\usg.bat -> usg.vbs -> usg.sh -> cpamc-launch.ps1
+computed:  CPAMC window: monitor 2 (\.\DISPLAY2) anchor Left rect 3072,0 856x1680 corrected=True
+observed:  OBSERVED rect x=3072 y=0 w=856 h=1680
+monitor2 working area: X=3072 Y=0 3072x1680 (taskbar 48px excluded)
+monitor2 bounds: X=3072 Y=0 3072x1728
+sha256 cpamc-launch.ps1: 3be6ed3efb0e135fa3bbf1f958c7c858d139bbe61b3696c4927ea6f86d91979b

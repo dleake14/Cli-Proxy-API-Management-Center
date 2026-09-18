@@ -1,0 +1,5 @@
+served_bundle=/home/david/cli-proxy-api/static/management.html
+fork_dist_size=2877729
+served_after_size=2877729
+served_sticky_matches=1
+note=fit-view span extension capped at +14d; zoom honors slider exactly

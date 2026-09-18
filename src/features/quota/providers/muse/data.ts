@@ -8,6 +8,12 @@
 import type { TFunction } from 'i18next';
 import type { AuthFileItem, MuseQuotaRow, MuseQuotaState } from '@/types';
 import { MUSE_USAGE_ENDPOINT } from '@/utils/quota/constants';
+import {
+  fetchSidecarJson,
+  isSidecarPayloadStale,
+  SidecarStaleError,
+  SidecarTimeoutError,
+} from '@/utils/quota/sidecarFetch';
 import { isDisabledAuthFile, isMuseFile } from '@/utils/quota/validators';
 import { museWeeklyResetMs } from '../../museResetSchedule';
 import type { QuotaProviderData } from '../types';
@@ -21,7 +27,10 @@ export interface MuseUsagePayload {
     limit?: number | string | null;
     reset_at_ms?: number | string | null;
     period_hours?: number | string | null;
+    stale?: boolean;
   }>;
+  stale?: boolean;
+  fetched_at?: string;
   error?: string;
 }
 
@@ -61,11 +70,11 @@ export async function requestMuseUsage(
   endpoint: string = MUSE_USAGE_ENDPOINT,
   fetchImpl: typeof fetch = fetch
 ): Promise<MuseUsagePayload> {
-  const response = await fetchImpl(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
-  const payload = (await response.json()) as MuseUsagePayload;
+  const { response, payload } = await fetchSidecarJson<MuseUsagePayload>(endpoint, fetchImpl);
   if (!response.ok || !payload || payload.ok === false) {
     throw new Error(payload?.error || `HTTP ${response.status}`);
   }
+  if (isSidecarPayloadStale(payload)) throw new SidecarStaleError();
   return payload;
 }
 
@@ -81,7 +90,13 @@ const fetchMuseQuota = async (file: AuthFileItem, t: TFunction): Promise<MuseQuo
   }
 
   if (failure) {
-    throw new Error(failure.message || t('muse_quota.unavailable'));
+    throw new Error(
+      failure instanceof SidecarStaleError
+        ? t('muse_quota.stale_data')
+        : failure instanceof SidecarTimeoutError
+          ? t('muse_quota.timeout')
+          : failure.message || t('muse_quota.unavailable')
+    );
   }
 
   const rows = buildMuseQuotaRows(payload);

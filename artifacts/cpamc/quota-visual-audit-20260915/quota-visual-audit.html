@@ -1,0 +1,129 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CPAMC quota page — visual audit 2026-09-15</title>
+<style>
+:root{color-scheme:light}
+body{margin:0;padding:36pt;font:13px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;color:#141414;background:#fbfbfa;max-width:1100px}
+h1{font-size:19px;margin:0 0 2px}
+h2{font-size:14px;margin:18px 0 5px;padding-bottom:2px;border-bottom:1px solid #d8d6d0}
+p.sub{margin:0 0 14px;color:#5a5750;font-size:12px}
+table{border-collapse:collapse;font-size:12px;margin:6px 0 12px}
+th,td{border:1px solid #d8d6d0;padding:2px 6px;vertical-align:top;text-align:left}
+th{background:#f0eee9;font-weight:600;white-space:nowrap}
+td.n,th.n{white-space:nowrap}
+code{font:11.5px ui-monospace,Menlo,Consolas,monospace;background:#f0eee9;padding:0 3px;border-radius:2px}
+.sev{font-weight:700;white-space:nowrap}
+.P1{color:#9b1c1c}.P2{color:#9a5b06}.P3{color:#4a4a4a}
+ol{margin:4px 0 10px;padding-left:20px}
+li{margin:3px 0}
+.bug{margin:10px 0 0;padding:8px 10px;border:1px solid #d8d6d0;background:#fff}
+.bug h3{margin:0 0 3px;font-size:13px}
+.bug p{margin:3px 0}
+.ev{color:#3a3a3a;font-size:12px}
+.foot{margin-top:18px;font-size:11.5px;color:#5a5750}
+</style>
+
+<h1>CPAMC quota page — visual audit</h1>
+<p class="sub">Fork <code>/home/david/forks/cpamc</code>, branch <code>main</code> @ <code>e8ee07c</code> · route <code>http://localhost:5173/#/quota</code> · 2026-09-15 06:15–06:45 CDT · measured in headless Chromium at 856×1728 (the size <code>cpamc-launch.ps1</code> ships) and at 1600×1100</p>
+
+<h2>Verdict</h2>
+<p>16 defects. Three make the quota-window strip unreadable at the window size USG opens: the chart is twice as wide as the window and zooming out makes it wider, the Codex lane is drawing the wrong week, and the card bars and the timeline bars fill from opposite ends of the same number.</p>
+
+<table>
+<tr><th class="n">#</th><th>Defect</th><th class="n">Sev</th><th>Measured evidence</th></tr>
+<tr><td class="n">1</td><td>Timeline is 2× the window width</td><td class="n sev P1">P1</td><td class="n">chart clientWidth 571px / scrollWidth 1134px</td></tr>
+<tr><td class="n">2</td><td>Zoom-out widens the chart; no setting fits</td><td class="n sev P1">P1</td><td class="n">width = 210 + days×44px; 21d→1134, 30d→1530</td></tr>
+<tr><td class="n">3</td><td>Codex lane draws the <em>previous</em> week as live</td><td class="n sev P1">P1</td><td class="n">live window 09/08 06:40→09/15 06:40, now 06:40</td></tr>
+<tr><td class="n">4</td><td>Codex window slides with the wall clock</td><td class="n sev P1">P1</td><td class="n">reset 09/22 06:40 → 06:42 over 150s, no reload</td></tr>
+<tr><td class="n">5</td><td>Card bar and timeline bar are complements</td><td class="n sev P1">P1</td><td class="n">Claude 7d: card 30%, timeline fill 70%</td></tr>
+<tr><td class="n">6</td><td>Cursor card fails though its sidecar is live</td><td class="n sev P1">P1</td><td class="n">endpoint 200 in 0.41s; card says "did not respond"</td></tr>
+<tr><td class="n">7</td><td>Cursor has no timeline lane at all</td><td class="n sev P1">P1</td><td class="n">lanes = Codex, Claude, Grok, Gemini, Muse</td></tr>
+<tr><td class="n">8</td><td>Grok and Muse print "used" beside a "remaining" bar</td><td class="n sev P2">P2</td><td class="n">"Used 21%" → bar width 79%</td></tr>
+<tr><td class="n">9</td><td>Five providers, five label conventions</td><td class="n sev P2">P2</td><td class="n">100% / 32% / Used 21% / 67% remaining / 4% used</td></tr>
+<tr><td class="n">10</td><td>Codex timeline window has no fill element</td><td class="n sev P2">P2</td><td class="n">0 <code>windowFill</code> nodes in the Codex lane</td></tr>
+<tr><td class="n">11</td><td>Past windows show no usage at all</td><td class="n sev P2">P2</td><td class="n">every <code>windowPast</code> is empty gray</td></tr>
+<tr><td class="n">12</td><td>On-pace chip collides with in-bar labels</td><td class="n sev P2">P2</td><td class="n">47px / 72px / 11px overlap, Claude lane</td></tr>
+<tr><td class="n">13</td><td>Duplicate on-pace chips stacked at one x</td><td class="n sev P2">P2</td><td class="n">2 identical chips, top 25% and 75%</td></tr>
+<tr><td class="n">14</td><td>Page never reaches a stable frame</td><td class="n sev P2">P2</td><td class="n">screenshot times out in 2 independent browsers</td></tr>
+<tr><td class="n">15</td><td>On-pace marker carries no spatial meaning</td><td class="n sev P3">P3</td><td class="n">pinned to the now-line x, not to the bar</td></tr>
+<tr><td class="n">16</td><td>Muse card shows two disagreeing usage rows</td><td class="n sev P3">P3</td><td class="n">"2% used" (no reset) vs "4% used"</td></tr>
+</table>
+
+<h2>1–2 · You cannot zoom out far enough because zooming out makes it wider</h2>
+<div class="bug">
+<p>USG opens Chrome at <code>--window-size=856,1728</code>. At that width the timeline chart measures <b>clientWidth 571px against scrollWidth 1134px</b> — exactly half the strip is off-screen behind a sideways scroll, which is why the fill bars look absent.</p>
+<p>The width is not CSS-driven. <code>QuotaTimeline.tsx:618</code> writes an inline custom property <code>--timeline-min-width = 210 + cells.length × 44px</code>, and <code>QuotaTimeline.module.scss:194</code> applies it as <code>min-width</code> on <code>.axis</code> and <code>.lane</code>. At the observed 21-day zoom that is 210 + 21×44 = <b>1134px</b>, matching the measurement to the pixel.</p>
+<p>The zoom slider runs <code>min=3 max=30</code> days and pixel width rises with days, so <b>zooming out always widens the chart</b>: 30 days = 1530px. Zooming <em>in</em> narrows it, but 3 days cannot contain a single 7-day window. No <code>@media</code> rule recomputes the property; the only responsive block (<code>:627-638</code>, mobile, 720px) is overridden by the inline style and is still wider than 571px.</p>
+<p class="ev">Evidence: <code>measured-856x1728.json</code>; <code>timeline-width-audit.md</code>.</p>
+</div>
+
+<h2>3–4 · The Codex lane is drawing last week, and its week slides forward in real time</h2>
+<div class="bug">
+<p>Two samples 150 seconds apart <b>in one page session with no reload</b>:</p>
+<table>
+<tr><th>Sample</th><th class="n">Codex lane reset</th><th class="n">Codex "live" window</th><th class="n">On-pace</th></tr>
+<tr><td class="n">t + 9s</td><td class="n">Resets Tue 09/22 06:40</td><td class="n">09/08 06:40 → 09/15 06:40</td><td class="n">0% remaining</td></tr>
+<tr><td class="n">t + 159s</td><td class="n">Resets Tue 09/22 06:42</td><td class="n">09/08 06:42 → 09/15 06:42</td><td class="n">0% remaining</td></tr>
+</table>
+<p>Both boundaries advanced by the elapsed wall time. Codex sends no absolute reset instant, so <code>providers/codex/data.ts:107-109</code> falls back to <code>parseOffsetSecondsToMs(reset_after_seconds, Date.now())</code>. With a constant upstream offset the derived instant is always "now + 7 days", so the window never arrives.</p>
+<p>Two consequences, both visible: the window marked <b>live</b> is <code>[reset−14d, reset−7d]</code> — one whole period behind the real current window, ending precisely at the now-line; and because that window always ends at this instant, the on-pace mark is frozen at <b>"0% remaining"</b> while the Codex card simultaneously reports <b>100%</b>. The card and the lane contradict each other on the same credential.</p>
+<p class="ev">Evidence: <code>drift.json</code> (staged); <code>timeline-code-map.md</code>.</p>
+</div>
+
+<h2>5, 8–11 · The bars fill from opposite ends of the same number</h2>
+<div class="bug">
+<p>Every card bar draws <b>remaining</b>. Every timeline bar draws <b>used</b>. Neither surface says so, and the printed number agrees with neither convention consistently.</p>
+<table>
+<tr><th>Provider / row</th><th class="n">Printed on card</th><th class="n">Card bar width</th><th class="n">Timeline fill</th><th>Reading</th></tr>
+<tr><td>Codex · Weekly limit</td><td class="n">100%</td><td class="n">100%</td><td class="n">none rendered</td><td>no fill node at all</td></tr>
+<tr><td>Claude · 7-day limit</td><td class="n">30%</td><td class="n">30%</td><td class="n">70%</td><td>complements</td></tr>
+<tr><td>Claude · fable</td><td class="n">54%</td><td class="n">54%</td><td class="n">46%</td><td>complements</td></tr>
+<tr><td>Grok · Weekly limit</td><td class="n">Used 21%</td><td class="n">79%</td><td class="n">21%</td><td>number ≠ bar</td></tr>
+<tr><td>Grok · GrokChat usage</td><td class="n">Used 2%</td><td class="n">98%</td><td class="n">—</td><td>number ≠ bar</td></tr>
+<tr><td>Gemini · Weekly</td><td class="n">67% remaining</td><td class="n">66.7%</td><td class="n">33%</td><td>complements</td></tr>
+<tr><td>Muse · High Usage</td><td class="n">4% used</td><td class="n">96%</td><td class="n">4%</td><td>number ≠ bar</td></tr>
+</table>
+<p>A source audit of all ten provider bars confirms the pattern: bar width is remaining everywhere, while the printed text uses <code>xai_quota.used_percent</code> and <code>muse_quota.used_percent</code> — the only two providers that print the complement of their own bar. Wording across the five visible cards is "100%", "30%", "Used 21%", "67% remaining", "4% used" for one quantity.</p>
+<p>Two further gaps in the strip itself: <b>Codex renders no fill element</b> (100% remaining collapses to a 0-width bar with no zero-state), and <b>every past window is empty gray</b> — historical consumption is never drawn, so reading consumption "over the course of a month" is not possible from this view.</p>
+<p class="ev">Evidence: <code>used-vs-remaining-audit.md</code>; <code>measured-856x1728.json</code>.</p>
+</div>
+
+<h2>6–7 · Cursor never loads, and a failed load deletes its lane</h2>
+<div class="bug">
+<p>The card reads <b>"Failed to load quota: Usage Ledger did not respond before the refresh deadline"</b>. The endpoint it names is healthy:</p>
+<table>
+<tr><th>Probe</th><th class="n">Result</th></tr>
+<tr><td><code>curl http://127.0.0.1:47193/cursor-usage</code></td><td class="n">HTTP 200 in 0.41s</td></tr>
+<tr><td><code>fetch()</code> from the loaded page itself</td><td class="n">HTTP 200 in 0.45s, plan Ultra, 3 windows, <code>stale:false</code></td></tr>
+<tr><td>Configured deadline</td><td class="n">12,000 ms</td></tr>
+</table>
+<p>So no real timeout occurs. <code>fetchSidecarJson</code> (<code>sidecarFetch.ts:59-74</code>) converts <em>any</em> error into <code>SidecarTimeoutError</code> whenever its controller is aborted, and there is no single-flight lock: mount, a 15s poll, focus, online, visibilitychange, per-card refresh and refresh-all can each start a concurrent Cursor request with its own 12s timer. The card reports "no response" for what is a request-pileup or cancellation.</p>
+<p>The lane then disappears entirely: <code>buildTimelineLane</code> returns <code>anchorMs: null</code> unless status is <code>success</code>, and <code>QuotaTimeline.tsx:256</code> filters lanes without a window. A failed fetch therefore removes the row instead of showing it degraded — the timeline silently under-reports which credentials exist.</p>
+<p class="ev">Evidence: <code>cursor-rootcause.md</code>.</p>
+</div>
+
+<h2>12–15 · Labels collide; the pace mark says nothing spatially</h2>
+<div class="bug">
+<p>Measured overlapping rectangles at 856px in the Claude lane:</p>
+<table>
+<tr><th>Pair</th><th class="n">Horizontal overlap</th></tr>
+<tr><td>"on-pace: 12% remaining" over "fable 54%"</td><td class="n">47px</td></tr>
+<tr><td>"on-pace: 12% remaining" over "30% 7-day limit"</td><td class="n">72px</td></tr>
+<tr><td>"on-pace: 12% remaining" over "09/23 02:00"</td><td class="n">11px</td></tr>
+</table>
+<p>Structural, not incidental: <code>.nowMark</code>, <code>.inBarLabel</code> and <code>.window</code> are all absolutely positioned inside one relative <code>.track</code> with percentage math and no mutual avoidance. Claude also renders <b>two identical on-pace chips</b> at the same x (top 25% and 75%, one per sub-limit), reading as a doubled smear.</p>
+<p>The on-pace <em>arithmetic</em> is correct — checked against wall clock: Grok 20% vs 20.3% computed, Gemini 33% vs 33.3%, Claude 12% vs 11.7%, and it ticks 12%→11% over 150s. The defect is presentational: the chip is pinned to the now-line x, so it is a caption on a vertical rule rather than a mark you can compare against the fill's edge. Nothing on screen lets you see fill-versus-pace as a distance.</p>
+<p>Finally, the page never reaches a stable frame. Full-page capture timed out in two independent browsers (Windows Chrome over CDP, and headless Chromium), and Playwright's stability wait failed with "waiting for element to be stable". Entry animations <code>quota-card-in</code> and <code>quota-meter-fill</code> (iterations: 1, ~0.45s) are still <code>playState: "running"</code> more than 9 seconds after load, which means the cards remount continuously; three further infinite animations run on the Codex plan chip. This is the likely shared cause of the Cursor request churn.</p>
+</div>
+
+<h2>Suggested fix order</h2>
+<ol>
+<li>Anchor the Codex window to an absolute instant, or mark an offset-derived window explicitly provisional. Fixes 3, 4 and the frozen 0% pace.</li>
+<li>Make <code>--timeline-min-width</code> fit the container: let day-cell width shrink to <code>(containerWidth − 210) / days</code> with a floor, so zooming out narrows the chart. Fixes 1 and 2.</li>
+<li>Pick one convention — draw <b>used</b> on both surfaces — and label every number with the same word. Fixes 5, 8, 9, 10.</li>
+<li>Add a per-provider single-flight lock and stop mapping cancellation onto the timeout string; render a degraded lane instead of deleting it. Fixes 6, 7.</li>
+<li>Give the on-pace mark its own row or offset it off the bar, deduplicate per-lane chips, and draw past-window fills. Fixes 11, 12, 13, 15.</li>
+<li>Find the remount loop behind the never-settling animations. Fixes 14 and probably removes the Cursor churn.</li>
+</ol>
+
+<p class="foot">Method: the page was loaded in headless Chromium with the management key seeded into <code>localStorage</code>, then measured through the DOM — bar widths, element rectangles, overlap intersection, scroll geometry — rather than eyeballed, because the page cannot be screenshotted (defect 14). Every percentage above is a read <code>style</code> attribute or a <code>getBoundingClientRect()</code> value. Source claims were traced to file and line by three independent read-only passes over the fork. No file in the fork was modified.</p>

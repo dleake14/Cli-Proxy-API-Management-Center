@@ -3,6 +3,7 @@
  */
 
 import type { TypeColorSet } from '@/types';
+import { resolveUsageSidecarUrl } from './sidecarUrl';
 
 // Theme colors for type badges — 与 authFiles/constants.ts 保持同步
 export const TYPE_COLORS: Record<string, TypeColorSet> = {
@@ -158,16 +159,22 @@ export const KIMI_USAGE_URL = 'https://api.kimi.com/coding/v1/usages';
  * 构建时可用 VITE_OLLAMA_USAGE_URL 覆盖。
  */
 export const OLLAMA_USAGE_ENDPOINT: string =
-  (import.meta.env?.VITE_OLLAMA_USAGE_URL as string | undefined)?.trim() ||
-  'http://127.0.0.1:47193/ollama-usage';
+  resolveUsageSidecarUrl(
+    '/ollama-usage',
+    import.meta.env?.VITE_OLLAMA_USAGE_URL as string | undefined
+  );
 
 export const CURSOR_USAGE_ENDPOINT: string =
-  (import.meta.env?.VITE_CURSOR_USAGE_URL as string | undefined)?.trim() ||
-  'http://127.0.0.1:47193/cursor-usage';
+  resolveUsageSidecarUrl(
+    '/cursor-usage',
+    import.meta.env?.VITE_CURSOR_USAGE_URL as string | undefined
+  );
 
 export const MUSE_USAGE_ENDPOINT: string =
-  (import.meta.env?.VITE_MUSE_USAGE_URL as string | undefined)?.trim() ||
-  'http://127.0.0.1:47193/muse-usage';
+  resolveUsageSidecarUrl(
+    '/muse-usage',
+    import.meta.env?.VITE_MUSE_USAGE_URL as string | undefined
+  );
 
 export const KIMI_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',

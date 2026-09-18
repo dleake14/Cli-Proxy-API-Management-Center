@@ -1,0 +1,33 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC quota management layout change evidence",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": ["validation.log", "diff.patch"]
+  },
+  "scope": {
+    "must_cover": [
+      "Gemini",
+      "Antigravity",
+      "Codex",
+      "Spark",
+      "Grok",
+      "Imagine",
+      "Monthly credits",
+      "Ollama",
+      "Kimi",
+      "Bun",
+      "rollback"
+    ],
+    "required_sections": [],
+    "must_answer": []
+  },
+  "floors": {
+    "min_words": 80,
+    "min_words_per_covered_term": 1
+  },
+  "forbidden_tokens": ["TODO", "Lorem ipsum", "OLLAMA_API_KEY="]
+}

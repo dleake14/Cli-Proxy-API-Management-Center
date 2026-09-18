@@ -1,0 +1,97 @@
+{
+ "innerW": 856,
+ "innerH": 1728,
+ "docH": 1728,
+ "chart": {
+  "cw": 571,
+  "sw": 1134,
+  "overflowing": true
+ },
+ "trackW": 924,
+ "tlW": 581,
+ "slider": {
+  "min": "3",
+  "max": "30",
+  "value": "21"
+ },
+ "markCount": 6,
+ "labelCount": 17,
+ "clippedLabels": [],
+ "overlaps": [
+  {
+   "a": "mark:on-pace: 12% remaining",
+   "b": "label:fable 54%",
+   "ox": 47,
+   "oy": 5
+  },
+  {
+   "a": "mark:on-pace: 12% remaining",
+   "b": "label:30% 7-day limit",
+   "ox": 72,
+   "oy": 3
+  },
+  {
+   "a": "mark:on-pace: 12% remaining",
+   "b": "label:09/23 02:00",
+   "ox": 11,
+   "oy": 14
+  }
+ ],
+ "cards": [
+  {
+   "w": "width: 100%; --meter-index: 0;",
+   "ctx": "Weekly limit | 100% | 09/22, 06:36 | in 6 days"
+  },
+  {
+   "w": "width: 87%; --meter-index: 0;",
+   "ctx": "5-hour limit | 87% | 09/15, 08:30 | in 1 hour"
+  },
+  {
+   "w": "width: 30%; --meter-index: 1;",
+   "ctx": "7-day limit | 30% | 09/16, 02:00 | in 19 hours"
+  },
+  {
+   "w": "width: 54%; --meter-index: 2;",
+   "ctx": "fable | 54% | 09/16, 02:00 | in 19 hours"
+  },
+  {
+   "w": "width: 79%; --meter-index: 0;",
+   "ctx": "Weekly limit | Used 21% | Resets 09/16, 16:28 | in 1 day"
+  },
+  {
+   "w": "width: 84%; --meter-index: 1;",
+   "ctx": "GrokBuild usage | Used 16%"
+  },
+  {
+   "w": "width: 98%; --meter-index: 2;",
+   "ctx": "GrokChat usage | Used 2%"
+  },
+  {
+   "w": "width: 100%; --meter-index: 0;",
+   "ctx": "Five Hour Limit Remaining | Quota available | Refreshes in 4h 59m"
+  },
+  {
+   "w": "width: 66.7%; --meter-index: 1;",
+   "ctx": "Weekly Limit Remaining | 67% remaining | Refreshes in 2d 7h"
+  },
+  {
+   "w": "width: 98%; --meter-index: 0;",
+   "ctx": "Current usage | 2% used"
+  },
+  {
+   "w": "width: 96%; --meter-index: 1;",
+   "ctx": "High Usage | 4% used | 09/20, 19:00 | in 5 days"
+  }
+ ],
+ "cursorCard": "present",
+ "failures": [
+  "Failed to load quota: Usage Ledger did not respond before the refresh deadline"
+ ],
+ "lanes": [
+  "Codex",
+  "Claude",
+  "Grok",
+  "Gemini",
+  "Muse High Usage"
+ ]
+}

@@ -1,0 +1,146 @@
+diff --git a/src/features/quota/QuotaPage.tsx b/src/features/quota/QuotaPage.tsx
+index f1c07f3..4e85bfe 100644
+--- a/src/features/quota/QuotaPage.tsx
++++ b/src/features/quota/QuotaPage.tsx
+@@ -106,0 +107 @@ export function QuotaPage() {
++  const ollamaQuota = useQuotaStore((state) => state.ollamaQuota);
+@@ -115,0 +117 @@ export function QuotaPage() {
++        ollama: ollamaQuota,
+@@ -118 +120 @@ export function QuotaPage() {
+-    [antigravityQuota, claudeQuota, codexQuota, kimiQuota, xaiQuota]
++    [antigravityQuota, claudeQuota, codexQuota, kimiQuota, ollamaQuota, xaiQuota]
+@@ -205 +207 @@ export function QuotaPage() {
+-  const { resettingQuotaName, refreshQuota, resetQuota } = useQuotaActions(disableControls);
++  const { refreshQuota } = useQuotaActions(disableControls);
+@@ -326 +327,0 @@ export function QuotaPage() {
+-                resetting={resettingQuotaName === entry.file.name}
+@@ -329 +329,0 @@ export function QuotaPage() {
+-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+diff --git a/src/features/quota/components/QuotaCard.tsx b/src/features/quota/components/QuotaCard.tsx
+index 0c5303a..0e20d1f 100644
+--- a/src/features/quota/components/QuotaCard.tsx
++++ b/src/features/quota/components/QuotaCard.tsx
+@@ -35 +34,0 @@ export type QuotaCardProps = {
+-  resetting: boolean;
+@@ -39 +37,0 @@ export type QuotaCardProps = {
+-  onReset: () => void;
+@@ -48 +45,0 @@ export function QuotaCard(props: QuotaCardProps) {
+-    resetting,
+@@ -51 +47,0 @@ export function QuotaCard(props: QuotaCardProps) {
+-    onReset,
+@@ -73,6 +68,0 @@ export function QuotaCard(props: QuotaCardProps) {
+-  const showReset =
+-    status === 'success' &&
+-    Boolean(adapter.resetQuota) &&
+-    quota !== undefined &&
+-    Boolean(adapter.canResetQuota?.(quota));
+-
+@@ -139,12 +128,0 @@ export function QuotaCard(props: QuotaCardProps) {
+-          {showReset && (
+-            <button
+-              type="button"
+-              className={styles.actionPill}
+-              onClick={onReset}
+-              disabled={!canRefresh || loading || resetting}
+-              title={t('codex_quota.reset_button')}
+-            >
+-              <IconRefreshCw size={13} className={resetting ? styles.spinning : undefined} />
+-              {t('codex_quota.reset_button')}
+-            </button>
+-          )}
+@@ -155 +133 @@ export function QuotaCard(props: QuotaCardProps) {
+-            disabled={isQuotaRefreshDisabled(canRefresh, loading, resetting)}
++            disabled={isQuotaRefreshDisabled(canRefresh, loading)}
+diff --git a/src/features/quota/logic.ts b/src/features/quota/logic.ts
+index 2b4b0ce..b74dde0 100644
+--- a/src/features/quota/logic.ts
++++ b/src/features/quota/logic.ts
+@@ -10,0 +11 @@ import { KIMI_CONFIG } from './providers/kimi/data';
++import { OLLAMA_CONFIG } from './providers/ollama/data';
+@@ -19,0 +21 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
++  ollama: OLLAMA_CONFIG.filterFn,
+@@ -22,0 +25,20 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
++/**
++ * Ollama 的占位条目。
++ *
++ * Ollama 不是 CLIProxyAPI 的原生 OAuth 提供商：auth-dir 里没有它的凭证文件，
++ * 后端也就永远不会把它列进 `/auth-files`。额度页又把每张卡绑在一个凭证文件上，
++ * 所以这里人工造一个条目，让 Ollama 以独立的「账户」出现在同一个网格里。
++ *
++ * `name` 就是卡头显示的文案，同时是额度缓存的键；`runtime_only` 让它不进删除/
++ * 停用流程（没有后端实体可操作）。
++ */
++export const OLLAMA_SYNTHETIC_FILE: AuthFileItem = {
++  name: 'Ollama Cloud',
++  provider: 'ollama',
++  type: 'ollama',
++  email: 'Ollama Cloud',
++  runtimeOnly: true,
++  disabled: false,
++  unavailable: false,
++};
++
+@@ -33,0 +56,3 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType
++ *
++ * 后端永远不列 Ollama（见 OLLAMA_SYNTHETIC_FILE），所以在这里补一条；
++ * 一旦真的出现 ollama 凭证，占位条就不再注入，避免双卡。
+@@ -43,0 +69,6 @@ export function classifyQuotaFiles(files: AuthFileItem[]): QuotaFileEntry[] {
++
++  const virtual: AuthFileItem[] = (groups.get('ollama')?.length ?? 0) === 0 ? [OLLAMA_SYNTHETIC_FILE] : [];
++  for (const file of virtual) {
++    groups.get('ollama')?.push({ file, type: 'ollama' });
++  }
++
+@@ -100,3 +131,2 @@ export const isQuotaRefreshDisabled = (
+-  loading: boolean,
+-  resetting: boolean
+-): boolean => !canRefresh || loading || resetting;
++  loading: boolean
++): boolean => !canRefresh || loading;
+diff --git a/tests/quotaPageLogic.test.ts b/tests/quotaPageLogic.test.ts
+index 3889074..d81d336 100644
+--- a/tests/quotaPageLogic.test.ts
++++ b/tests/quotaPageLogic.test.ts
+@@ -126,3 +126,4 @@ describe('isQuotaRefreshDisabled', () => {
+-  test('blocks a single-card refresh while the same quota is resetting', () => {
+-    expect(isQuotaRefreshDisabled(true, false, true)).toBe(true);
+-    expect(isQuotaRefreshDisabled(true, false, false)).toBe(false);
++  test('blocks a single-card refresh while unavailable or loading', () => {
++    expect(isQuotaRefreshDisabled(false, false)).toBe(true);
++    expect(isQuotaRefreshDisabled(true, true)).toBe(true);
++    expect(isQuotaRefreshDisabled(true, false)).toBe(false);
+diff --git a/tests/quotaCardActions.test.ts b/tests/quotaCardActions.test.ts
+new file mode 100644
+index 0000000..87415ac
+--- /dev/null
++++ b/tests/quotaCardActions.test.ts
+@@ -0,0 +1,29 @@
++import { describe, expect, test } from 'bun:test';
++
++const readSource = (path: string) => Bun.file(new URL(`../${path}`, import.meta.url)).text();
++
++describe('quota management card actions', () => {
++  test('keeps refresh quota as the only card action', async () => {
++    const source = await readSource('src/features/quota/components/QuotaCard.tsx');
++
++    expect(source).toContain("t('auth_files.quota_refresh_single')");
++    expect(source).toContain('onClick={onRefresh}');
++    expect(source).not.toContain('codex_quota.reset_button');
++    expect(source).not.toContain('onReset');
++    expect(source).not.toContain('showReset');
++  });
++
++  test('does not wire a reset callback into the quota management page', async () => {
++    const source = await readSource('src/features/quota/QuotaPage.tsx');
++
++    expect(source).toContain('const { refreshQuota } = useQuotaActions(disableControls);');
++    expect(source).not.toContain('resetQuota } = useQuotaActions');
++    expect(source).not.toContain('onReset=');
++  });
++
++  test('keeps reset support scoped to the auth-file page', async () => {
++    const source = await readSource('src/features/authFiles/components/AuthFileQuotaSection.tsx');
++
++    expect(source).toContain("t('codex_quota.reset_button')");
++  });
++});

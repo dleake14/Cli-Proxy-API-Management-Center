@@ -1731,6 +1731,8 @@
     "load_failed": "Не удалось загрузить квоту: {{message}}",
     "empty_data": "Нет данных о квоте",
     "unreachable": "Usage Ledger недоступен (запустите на 127.0.0.1:47193)",
+    "timeout": "Usage Ledger did not respond before the refresh deadline",
+    "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Обновить квоту",
     "fetch_all": "Загрузить всё",
     "session_window": "Сессия",
@@ -1746,6 +1748,8 @@
     "load_failed": "Failed to load quota: {{message}}",
     "empty_data": "No quota data available",
     "unreachable": "Usage Ledger is unreachable (start it on 127.0.0.1:47193)",
+    "timeout": "Usage Ledger did not respond before the refresh deadline",
+    "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Refresh Quota"
   },
   "muse_quota": {
@@ -1758,6 +1762,8 @@
     "load_failed": "Failed to load quota: {{message}}",
     "empty_data": "No remaining-percent meter is published",
     "unavailable": "Muse High Usage remaining is not published by Meta.",
+    "timeout": "Usage Ledger did not respond before the refresh deadline",
+    "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Refresh Quota"
   }
 }

@@ -44,7 +44,13 @@ export const TIMELINE_ZOOM_BOUNDS: Record<
 
 export function clampTimelineZoomDays(mode: TimelineMode, visibleDays: number): number {
   const { min, max } = TIMELINE_ZOOM_BOUNDS[mode];
-  return Math.max(min, Math.min(max, Math.round(Number.isFinite(visibleDays) ? visibleDays : TIMELINE_ZOOM_BOUNDS[mode].default)));
+  return Math.max(
+    min,
+    Math.min(
+      max,
+      Math.round(Number.isFinite(visibleDays) ? visibleDays : TIMELINE_ZOOM_BOUNDS[mode].default)
+    )
+  );
 }
 
 /** The rolling window the session view projects, in hours. */
@@ -198,8 +204,14 @@ export function currentWindowSpan(
   let first = now;
   let last = now;
   for (const lane of lanes) {
-    if (lane.anchorMs === null || !Number.isFinite(lane.anchorMs) ||
-        !lane.periodHours || !Number.isFinite(lane.periodHours) || lane.periodHours <= 0) continue;
+    if (
+      lane.anchorMs === null ||
+      !Number.isFinite(lane.anchorMs) ||
+      !lane.periodHours ||
+      !Number.isFinite(lane.periodHours) ||
+      lane.periodHours <= 0
+    )
+      continue;
     const periodMs = lane.periodHours * HOUR_MS;
     // At an exact boundary the next window has just opened.
     const end = lane.anchorMs + (Math.floor((now - lane.anchorMs) / periodMs) + 1) * periodMs;
@@ -211,8 +223,11 @@ export function currentWindowSpan(
   if (endMs <= last) endMs = addCalendarDays(last, 1);
   const start = chicagoDateParts(startMs);
   const end = chicagoDateParts(endMs);
-  const days = Math.round((Date.UTC(end.year, end.month - 1, end.day) -
-    Date.UTC(start.year, start.month - 1, start.day)) / DAY_MS);
+  const days = Math.round(
+    (Date.UTC(end.year, end.month - 1, end.day) -
+      Date.UTC(start.year, start.month - 1, start.day)) /
+      DAY_MS
+  );
   return { startMs, endMs, days };
 }
 
@@ -298,7 +313,8 @@ export function timelineSpanZoomed(
 export function extendSpanToCoverNextWindows(
   span: { startMs: number; endMs: number; days: number },
   lanes: readonly TimelineLane[],
-  now: number
+  now: number,
+  maxExtendDays?: number
 ): { startMs: number; endMs: number; days: number } {
   let maxEnd = span.endMs;
   for (const lane of lanes) {
@@ -307,6 +323,11 @@ export function extendSpanToCoverNextWindows(
     // The next reset at or after now, then the window that opens there.
     const nextReset = lane.anchorMs + Math.ceil((now - lane.anchorMs) / periodMs) * periodMs;
     const nextWindowEnd = nextReset + periodMs;
+    // A long-cycle lane (a 30-day Cursor subscription) must not balloon a
+    // two-week view into a six-week one: cap how far the span may grow. The
+    // rest of that next window appears when the operator zooms or pans out.
+    if (maxExtendDays !== undefined && nextWindowEnd > span.endMs + maxExtendDays * DAY_MS)
+      continue;
     if (nextWindowEnd > maxEnd) maxEnd = nextWindowEnd;
   }
   if (maxEnd <= span.endMs) return span;
@@ -434,8 +455,13 @@ export function pickLaneWindow<
  * windows fall outside the visible span still gets a row, and says so.
  */
 export function laneHasWindow(lane: TimelineLane): boolean {
-  return lane.anchorMs !== null && Number.isFinite(lane.anchorMs) &&
-    lane.periodHours !== null && Number.isFinite(lane.periodHours) && lane.periodHours > 0;
+  return (
+    lane.anchorMs !== null &&
+    Number.isFinite(lane.anchorMs) &&
+    lane.periodHours !== null &&
+    Number.isFinite(lane.periodHours) &&
+    lane.periodHours > 0
+  );
 }
 
 /* ------------------------------------------------------------------ lanes */
@@ -457,7 +483,9 @@ const filterBucketsForTimelineView = <T extends { periodHours?: number | null }>
 ): T[] => {
   if (maxPeriodHours === undefined) return [...buckets];
   if (maxPeriodHours < WEEKLY_VIEW_MIN_HOURS) {
-    const short = buckets.filter((bucket) => (bucket.periodHours ?? Infinity) <= SESSION_PERIOD_HOURS);
+    const short = buckets.filter(
+      (bucket) => (bucket.periodHours ?? Infinity) <= SESSION_PERIOD_HOURS
+    );
     return short.length > 0 ? short : [...buckets];
   }
   const weekly = buckets.filter((bucket) => (bucket.periodHours ?? 0) >= WEEKLY_VIEW_MIN_HOURS);
@@ -525,8 +553,12 @@ export function scheduledRemainingAt(
   windowStartMs: number,
   windowEndMs: number
 ): number | null {
-  if (![nowMs, windowStartMs, windowEndMs].every(Number.isFinite) ||
-      nowMs < windowStartMs || nowMs >= windowEndMs) return null;
+  if (
+    ![nowMs, windowStartMs, windowEndMs].every(Number.isFinite) ||
+    nowMs < windowStartMs ||
+    nowMs >= windowEndMs
+  )
+    return null;
   const duration = windowEndMs - windowStartMs;
   if (!(duration > 0)) return null;
   return clampPercent(Math.round((100 * (windowEndMs - nowMs)) / duration));
@@ -563,11 +595,13 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     let windows = ((quota as { windows?: WindowLike[] }).windows ?? [])
       .filter((window) => typeof window.resetAtMs === 'number')
       .filter((window) => provider !== 'codex' || !isHiddenCodexWindow(window));
-    if (provider === 'claude' && maxPeriodHours !== undefined && maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS) {
+    if (
+      provider === 'claude' &&
+      maxPeriodHours !== undefined &&
+      maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS
+    ) {
       const weekly = windows.filter(
-        (window) =>
-          isClaudeStackedWindow(window.id) ||
-          (window.periodHours ?? 0) >= 24 * 7
+        (window) => isClaudeStackedWindow(window.id) || (window.periodHours ?? 0) >= 24 * 7
       );
       windows = weekly.length > 0 ? weekly : windows;
     }
@@ -625,7 +659,9 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
       remaining:
         typeof chosen.usedPercent === 'number' ? clampPercent(100 - chosen.usedPercent) : null,
       limits:
-        provider === 'claude' && maxPeriodHours !== undefined && maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS
+        provider === 'claude' &&
+        maxPeriodHours !== undefined &&
+        maxPeriodHours >= WEEKLY_VIEW_MIN_HOURS
           ? []
           : limits,
       compactHead:
@@ -707,7 +743,12 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     };
   }
 
-  if (provider === 'kimi' || provider === 'ollama' || provider === 'cursor' || provider === 'muse') {
+  if (
+    provider === 'kimi' ||
+    provider === 'ollama' ||
+    provider === 'cursor' ||
+    provider === 'muse'
+  ) {
     const allRows = ((quota as { rows?: KimiRowLike[] }).rows ?? []).filter(
       (row) => typeof row.resetAtMs === 'number'
     );
@@ -726,9 +767,9 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
           : allRows;
     const preferredCursor =
       provider === 'cursor'
-        ? rows.find((row) => row.id === 'session') ??
+        ? (rows.find((row) => row.id === 'session') ??
           rows.find((row) => row.id === 'weekly') ??
-          null
+          null)
         : null;
     const chosen = preferredCursor ?? pickLaneWindow(rows, maxPeriodHours);
     if (!chosen) return empty;
@@ -758,20 +799,19 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
 const rowQuota = (
   quota: Record<string, unknown> | undefined,
   rows: KimiRowLike[]
-): TimelineLaneInput['quota'] => ({ ...quota, status: 'success', rows }) as TimelineLaneInput['quota'];
+): TimelineLaneInput['quota'] =>
+  ({ ...quota, status: 'success', rows }) as TimelineLaneInput['quota'];
 
 const claudeWindowQuota = (
   quota: Record<string, unknown> | undefined,
   windows: WindowLike[]
-): TimelineLaneInput['quota'] => ({ ...quota, status: 'success', windows }) as TimelineLaneInput['quota'];
+): TimelineLaneInput['quota'] =>
+  ({ ...quota, status: 'success', windows }) as TimelineLaneInput['quota'];
 
 const remainingFromUsed = (usedPercent: number | null | undefined) =>
   typeof usedPercent === 'number' ? clampPercent(100 - usedPercent) : null;
 
-const finishStackedLane = (
-  lane: TimelineLane,
-  stackedBars: TimelineStackedBar[]
-): TimelineLane => {
+const finishStackedLane = (lane: TimelineLane, stackedBars: TimelineStackedBar[]): TimelineLane => {
   const remainders = stackedBars
     .map((bar) => bar.remaining)
     .filter((value): value is number => value !== null);
@@ -805,14 +845,19 @@ export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
 
     // Independent pools may reset at different instants. Never borrow the
     // Fable clock for the account-wide allowance.
-    if (fable && allModels && (fable.resetAtMs !== allModels.resetAtMs ||
-        fable.periodHours !== allModels.periodHours)) {
-      return [fable, allModels].map((window) => buildTimelineLane({
-        ...input,
-        name: `${input.name}:${window.id}`,
-        displayName: `${input.displayName} · ${window.label ?? window.id}`,
-        quota: claudeWindowQuota(quota, [window]),
-      }));
+    if (
+      fable &&
+      allModels &&
+      (fable.resetAtMs !== allModels.resetAtMs || fable.periodHours !== allModels.periodHours)
+    ) {
+      return [fable, allModels].map((window) =>
+        buildTimelineLane({
+          ...input,
+          name: `${input.name}:${window.id}`,
+          displayName: `${input.displayName} · ${window.label ?? window.id}`,
+          quota: claudeWindowQuota(quota, [window]),
+        })
+      );
     }
 
     const stackedBars: TimelineStackedBar[] = [];
@@ -913,6 +958,28 @@ export function buildTimelineLanes(input: TimelineLaneInput): TimelineLane[] {
   return [buildTimelineLane(input)];
 }
 
+/**
+ * Zoom a span around a date the operator is currently viewing.
+ *
+ * `position` is the anchor's fractional position in the old span. Keeping the
+ * same fraction in the new span means a slider change expands or contracts on
+ * both sides of the date in view instead of snapping the range back to today.
+ */
+export function zoomSpanAtAnchor(
+  span: { startMs: number; endMs: number; days: number },
+  anchorMs: number,
+  position: number,
+  mode: TimelineMode,
+  visibleDays: number
+): { startMs: number; endMs: number; days: number } {
+  const days = clampTimelineZoomDays(mode, visibleDays);
+  const fallbackAnchor = span.startMs + (span.endMs - span.startMs) / 2;
+  const safeAnchor = Number.isFinite(anchorMs) ? anchorMs : fallbackAnchor;
+  const fraction = Number.isFinite(position) ? Math.max(0, Math.min(1, position)) : 0.5;
+  const startMs = startOfDay(safeAnchor - fraction * days * DAY_MS);
+  return { startMs, endMs: addCalendarDays(startMs, days), days };
+}
+
 /** Zoom around today's position without changing any provider's clock. */
 export function zoomCurrentSpan(
   span: { startMs: number; endMs: number; days: number },
@@ -920,10 +987,9 @@ export function zoomCurrentSpan(
   mode: TimelineMode,
   visibleDays: number
 ): { startMs: number; endMs: number; days: number } {
-  const days = clampTimelineZoomDays(mode, visibleDays);
-  const fraction = Math.max(0, Math.min(1, (now - span.startMs) / (span.endMs - span.startMs)));
-  const startMs = startOfDay(now - fraction * days * DAY_MS);
-  return { startMs, endMs: addCalendarDays(startMs, days), days };
+  const rawFraction = (now - span.startMs) / (span.endMs - span.startMs);
+  const fraction = Number.isFinite(rawFraction) ? Math.max(0, Math.min(1, rawFraction)) : 0.5;
+  return zoomSpanAtAnchor(span, now, fraction, mode, visibleDays);
 }
 
 /** Used fill ends at its full-window position, even when either edge is cropped. */
@@ -933,10 +999,12 @@ export function visibleUsedPercent(
   spanStartMs: number,
   spanEndMs: number
 ): number {
-  if (![window.startMs, window.endMs, remaining, spanStartMs, spanEndMs].every(Number.isFinite)) return 0;
+  if (![window.startMs, window.endMs, remaining, spanStartMs, spanEndMs].every(Number.isFinite))
+    return 0;
   const left = Math.max(window.startMs, spanStartMs);
   const right = Math.min(window.endMs, spanEndMs);
   if (right <= left) return 0;
-  const usedEnd = window.startMs + (window.endMs - window.startMs) * (1 - clampPercent(remaining) / 100);
-  return clampPercent(100 * (usedEnd - left) / (right - left));
+  const usedEnd =
+    window.startMs + (window.endMs - window.startMs) * (1 - clampPercent(remaining) / 100);
+  return clampPercent((100 * (usedEnd - left)) / (right - left));
 }

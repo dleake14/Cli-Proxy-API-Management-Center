@@ -1,0 +1,76 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "sidebar rail auto-collapsed when the CPAMC app window launches, session-scoped so a fresh launch collapses again",
+      "quota windows timeline rendered above the general per-credential meter card grid",
+      "existing uncommitted quota WIP preserved (no reset, no checkout, allowlisted files only)",
+      "deterministic tests, lint, type-check, and production build pass",
+      "rollback pointer for the exact edit"
+    ]
+  },
+  "changed_files": [
+    "src/components/layout/MainLayout.tsx",
+    "src/components/layout/shellUiState.ts",
+    "src/features/quota/QuotaPage.tsx",
+    "tests/shellUiState.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "cpamc-quota-layout.png",
+      "ui-proof.json",
+      "launcher-verify.txt"
+    ]
+  },
+  "rollback": {
+    "command": "git apply -R artifacts/cpamc/usg-launch-monitor2/diff.patch",
+    "baseline_ref": "git:e8ee07c (working-tree quota WIP preserved; reverse-apply the diff to undo only this change)"
+  },
+  "ui_change": true,
+  "proof": {
+    "browser": "Chrome 152.0.7977.84 (dedicated cpamc-chrome profile, CDP 127.0.0.1:19327)",
+    "route": "http://localhost:5173/#/quota",
+    "viewport": "936x1826 (observed)",
+    "console_error_count": 0,
+    "observed": {
+      "sidebarCollapsed": true,
+      "appShellClass": "app-shell sidebar-is-collapsed",
+      "timelineTop": 203,
+      "gridTop": 894,
+      "timelineAboveGrid": true
+    },
+    "launcher": {
+      "path": "/home/david/projects/chrome-scut/cpamc-launch.ps1",
+      "chain": "C:\\Users\\David\\usg.bat -> usg.vbs -> usg.sh -> cpamc-launch.ps1",
+      "computed": "monitor 2 (\\.\\DISPLAY2) anchor Left rect 3072,0 856x1680",
+      "observed": "x=3072 y=0 w=856 h=1680"
+    }
+  },
+  "checks": {
+    "required_paths": [
+      "src/components/layout/shellUiState.ts",
+      "tests/shellUiState.test.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/components/layout/MainLayout.tsx",
+        "contains": "readSidebarCollapsedDefault"
+      },
+      {
+        "path": "src/features/quota/QuotaPage.tsx",
+        "contains": "Quota windows first"
+      },
+      {
+        "path": "src/components/layout/shellUiState.ts",
+        "contains": "readSidebarCollapsedDefault"
+      }
+    ],
+    "forbidden_text": []
+  }
+}

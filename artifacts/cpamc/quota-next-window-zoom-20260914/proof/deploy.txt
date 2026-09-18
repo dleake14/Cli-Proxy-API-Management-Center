@@ -1,0 +1,9 @@
+served_bundle=/home/david/cli-proxy-api/static/management.html
+served_bundle_before_size=2849259
+served_bundle_before_timeline_zoom_matches=0
+served_bundle_after_size=2877148
+served_bundle_after_mtime=2026-09-14 12:36:44
+fork_dist_size=2877148
+served_equals_fork_dist=yes
+served_timeline_zoom_matches_after=2
+served_faded_next_style_matches_after=1

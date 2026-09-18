@@ -1,0 +1,19 @@
+{
+  "schema": "deliverable-gate/v1",
+  "title": "CPAMC quota-window zoom and next subscription run",
+  "kind": "markdown_doc",
+  "produced_by": "skills/cpamc-fork-modification",
+  "artifacts": {
+    "primary": "cpamc-change.md",
+    "source": "cpamc-change.json",
+    "supporting": ["validation.log", "diff.patch", "proof/deploy.txt", "proof/render-check.out.txt"]
+  },
+  "scope": {
+    "must_cover": ["zoom", "subscription", "Claude", "Cursor", "rollback"]
+  },
+  "floors": {
+    "min_words": 120,
+    "min_words_per_covered_term": 1
+  },
+  "forbidden_tokens": ["TODO", "Lorem ipsum", "OLLAMA_API_KEY=", "sk-"]
+}

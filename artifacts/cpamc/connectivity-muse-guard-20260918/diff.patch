@@ -1,0 +1,842 @@
+diff --git a/src/features/quota/constants.ts b/src/features/quota/constants.ts
+index 055bc5c..12b8753 100644
+--- a/src/features/quota/constants.ts
++++ b/src/features/quota/constants.ts
+@@ -6,6 +6,8 @@ export const QUOTA_TAB_ORDER: readonly QuotaProviderType[] = [
+   'claude',
+   'xai',
+   'antigravity',
++  'kimi',
++  'ollama',
+   'cursor',
+   'muse',
+ ];
+diff --git a/src/features/quota/logic.ts b/src/features/quota/logic.ts
+index 9d8b273..6cc2149 100644
+--- a/src/features/quota/logic.ts
++++ b/src/features/quota/logic.ts
+@@ -38,11 +38,12 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType
+  * 把文件列表归类为额度条目：不支持额度或已停用的文件被过滤，
+  * 结果按 QUOTA_TAB_ORDER 分组排列（'全部' tab 的卡片顺序即由此决定）。
+  *
+- * Only the four supported operator-facing providers are in QUOTA_TAB_ORDER;
+- * other provider files remain available to their owning surfaces but do not
+- * render as quota cards here.
++ * Every provider with a quota adapter is in QUOTA_TAB_ORDER. Providers without
++ * backend auth files use runtime-only synthetic cards and cannot enter auth
++ * mutation flows.
+  */
+ const RUNTIME_QUOTA_CARDS: ReadonlyArray<{ name: string; type: QuotaProviderType }> = [
++  { name: 'Ollama Cloud', type: 'ollama' },
+   { name: 'Cursor Ultra', type: 'cursor' },
+   { name: 'Muse High Usage', type: 'muse' },
+ ];
+diff --git a/src/features/quota/providers/cursor/data.ts b/src/features/quota/providers/cursor/data.ts
+index 2257180..999cec9 100644
+--- a/src/features/quota/providers/cursor/data.ts
++++ b/src/features/quota/providers/cursor/data.ts
+@@ -8,6 +8,12 @@
+ import type { TFunction } from 'i18next';
+ import type { AuthFileItem, CursorQuotaRow, CursorQuotaState } from '@/types';
+ import { CURSOR_USAGE_ENDPOINT } from '@/utils/quota/constants';
++import {
++  fetchSidecarJson,
++  isSidecarPayloadStale,
++  SidecarStaleError,
++  SidecarTimeoutError,
++} from '@/utils/quota/sidecarFetch';
+ import { isCursorFile, isDisabledAuthFile } from '@/utils/quota/validators';
+ import { isCursorTimelineRow } from '../../windowVisibility';
+ import type { QuotaProviderData } from '../types';
+@@ -19,6 +25,7 @@ export interface CursorUsageWindow {
+   limit?: number | string | null;
+   reset_at_ms?: number | string | null;
+   period_hours?: number | string | null;
++  stale?: boolean;
+ }
+ 
+ export interface CursorUsagePayload {
+@@ -65,14 +72,14 @@ export async function requestCursorUsage(
+   endpoint: string = CURSOR_USAGE_ENDPOINT,
+   fetchImpl: typeof fetch = fetch
+ ): Promise<CursorUsagePayload> {
+-  const response = await fetchImpl(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
++  const { response, payload } = await fetchSidecarJson<CursorUsagePayload>(endpoint, fetchImpl);
+   if (!response.ok) {
+     throw new Error(`HTTP ${response.status}`);
+   }
+-  const payload = (await response.json()) as CursorUsagePayload;
+   if (!payload || payload.ok === false) {
+     throw new Error(payload?.error || 'empty_data');
+   }
++  if (isSidecarPayloadStale(payload)) throw new SidecarStaleError();
+   return payload;
+ }
+ 
+@@ -87,7 +94,13 @@ const fetchCursorQuota = async (file: AuthFileItem, t: TFunction): Promise<Curso
+   }
+   if (failure) {
+     throw new Error(
+-      failure.message.startsWith('HTTP') ? failure.message : t('cursor_quota.unreachable')
++      failure instanceof SidecarStaleError
++        ? t('cursor_quota.stale_data')
++        : failure instanceof SidecarTimeoutError
++          ? t('cursor_quota.timeout')
++          : failure.message.startsWith('HTTP')
++            ? failure.message
++            : t('cursor_quota.unreachable')
+     );
+   }
+   const rows = buildCursorQuotaRows(payload);
+diff --git a/src/features/quota/providers/muse/data.ts b/src/features/quota/providers/muse/data.ts
+index e36af85..791feae 100644
+--- a/src/features/quota/providers/muse/data.ts
++++ b/src/features/quota/providers/muse/data.ts
+@@ -8,6 +8,12 @@
+ import type { TFunction } from 'i18next';
+ import type { AuthFileItem, MuseQuotaRow, MuseQuotaState } from '@/types';
+ import { MUSE_USAGE_ENDPOINT } from '@/utils/quota/constants';
++import {
++  fetchSidecarJson,
++  isSidecarPayloadStale,
++  SidecarStaleError,
++  SidecarTimeoutError,
++} from '@/utils/quota/sidecarFetch';
+ import { isDisabledAuthFile, isMuseFile } from '@/utils/quota/validators';
+ import { museWeeklyResetMs } from '../../museResetSchedule';
+ import type { QuotaProviderData } from '../types';
+@@ -21,7 +27,10 @@ export interface MuseUsagePayload {
+     limit?: number | string | null;
+     reset_at_ms?: number | string | null;
+     period_hours?: number | string | null;
++    stale?: boolean;
+   }>;
++  stale?: boolean;
++  fetched_at?: string;
+   error?: string;
+ }
+ 
+@@ -61,11 +70,11 @@ export async function requestMuseUsage(
+   endpoint: string = MUSE_USAGE_ENDPOINT,
+   fetchImpl: typeof fetch = fetch
+ ): Promise<MuseUsagePayload> {
+-  const response = await fetchImpl(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
+-  const payload = (await response.json()) as MuseUsagePayload;
++  const { response, payload } = await fetchSidecarJson<MuseUsagePayload>(endpoint, fetchImpl);
+   if (!response.ok || !payload || payload.ok === false) {
+     throw new Error(payload?.error || `HTTP ${response.status}`);
+   }
++  if (isSidecarPayloadStale(payload)) throw new SidecarStaleError();
+   return payload;
+ }
+ 
+@@ -81,7 +90,13 @@ const fetchMuseQuota = async (file: AuthFileItem, t: TFunction): Promise<MuseQuo
+   }
+ 
+   if (failure) {
+-    throw new Error(failure.message || t('muse_quota.unavailable'));
++    throw new Error(
++      failure instanceof SidecarStaleError
++        ? t('muse_quota.stale_data')
++        : failure instanceof SidecarTimeoutError
++          ? t('muse_quota.timeout')
++          : failure.message || t('muse_quota.unavailable')
++    );
+   }
+ 
+   const rows = buildMuseQuotaRows(payload);
+diff --git a/src/features/quota/providers/ollama/data.ts b/src/features/quota/providers/ollama/data.ts
+index 8754428..a5d4d19 100644
+--- a/src/features/quota/providers/ollama/data.ts
++++ b/src/features/quota/providers/ollama/data.ts
+@@ -10,6 +10,12 @@
+ import type { TFunction } from 'i18next';
+ import type { AuthFileItem, OllamaQuotaRow, OllamaQuotaState } from '@/types';
+ import { OLLAMA_USAGE_ENDPOINT } from '@/utils/quota/constants';
++import {
++  fetchSidecarJson,
++  isSidecarPayloadStale,
++  SidecarStaleError,
++  SidecarTimeoutError,
++} from '@/utils/quota/sidecarFetch';
+ import { isDisabledAuthFile, isOllamaFile } from '@/utils/quota/validators';
+ import type { QuotaProviderData } from '../types';
+ 
+@@ -21,6 +27,7 @@ export interface OllamaUsageWindow {
+   limit?: number | string | null;
+   reset_at_ms?: number | string | null;
+   period_hours?: number | string | null;
++  stale?: boolean;
+ }
+ 
+ export interface OllamaUsagePayload {
+@@ -83,14 +90,14 @@ export async function requestOllamaUsage(
+   endpoint: string = OLLAMA_USAGE_ENDPOINT,
+   fetchImpl: typeof fetch = fetch
+ ): Promise<OllamaUsagePayload> {
+-  const response = await fetchImpl(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
++  const { response, payload } = await fetchSidecarJson<OllamaUsagePayload>(endpoint, fetchImpl);
+   if (!response.ok) {
+     throw new Error(`HTTP ${response.status}`);
+   }
+-  const payload = (await response.json()) as OllamaUsagePayload;
+   if (!payload || payload.ok === false) {
+     throw new Error(payload?.error || 'empty_data');
+   }
++  if (isSidecarPayloadStale(payload)) throw new SidecarStaleError();
+   return payload;
+ }
+ 
+@@ -109,7 +116,13 @@ const fetchOllamaQuota = async (file: AuthFileItem, t: TFunction): Promise<Ollam
+   // message is only substituted when the sidecar itself is unreachable.
+   if (failure) {
+     throw new Error(
+-      failure.message.startsWith('HTTP') ? failure.message : t('ollama_quota.unreachable')
++      failure instanceof SidecarStaleError
++        ? t('ollama_quota.stale_data')
++        : failure instanceof SidecarTimeoutError
++          ? t('ollama_quota.timeout')
++          : failure.message.startsWith('HTTP')
++            ? failure.message
++            : t('ollama_quota.unreachable')
+     );
+   }
+ 
+diff --git a/src/utils/connection.ts b/src/utils/connection.ts
+index 33a2f22..a5f329a 100644
+--- a/src/utils/connection.ts
++++ b/src/utils/connection.ts
+@@ -1,5 +1,13 @@
+ import { DEFAULT_API_PORT, MANAGEMENT_API_PREFIX } from './constants';
+ 
++export type ApiBaseLocation = {
++  protocol: string;
++  hostname: string;
++  port: string;
++};
++
++const LOCAL_FRONTEND_PORTS = new Set(['5173', '47193']);
++
+ export const normalizeApiBase = (input: string): string => {
+   let base = (input || '').trim();
+   if (!base) return '';
+@@ -17,11 +25,20 @@ export const computeApiUrl = (base: string): string => {
+   return `${normalized}${MANAGEMENT_API_PREFIX}`;
+ };
+ 
++export const apiBaseFromLocation = (location: ApiBaseLocation): string => {
++  const { protocol, hostname, port } = location;
++  // The maintained fork is served by Vite on 5173 and through the Usage
++  // monitor on 47193, while CLIProxyAPI owns the management API on 8317.
++  // Reusing the page port makes the login form call /v0/management on the
++  // frontend server and presents a misleading network error.
++  const resolvedPort = LOCAL_FRONTEND_PORTS.has(port) ? String(DEFAULT_API_PORT) : port;
++  const normalizedPort = resolvedPort ? `:${resolvedPort}` : '';
++  return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}`);
++};
++
+ export const detectApiBaseFromLocation = (): string => {
+   try {
+-    const { protocol, hostname, port } = window.location;
+-    const normalizedPort = port ? `:${port}` : '';
+-    return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}`);
++    return apiBaseFromLocation(window.location);
+   } catch (error) {
+     console.warn('Failed to detect api base from location, fallback to default', error);
+     return normalizeApiBase(`http://localhost:${DEFAULT_API_PORT}`);
+diff --git a/src/utils/quota/constants.ts b/src/utils/quota/constants.ts
+index 9ef15db..b43bd00 100644
+--- a/src/utils/quota/constants.ts
++++ b/src/utils/quota/constants.ts
+@@ -3,6 +3,7 @@
+  */
+ 
+ import type { TypeColorSet } from '@/types';
++import { resolveUsageSidecarUrl } from './sidecarUrl';
+ 
+ // Theme colors for type badges — 与 authFiles/constants.ts 保持同步
+ export const TYPE_COLORS: Record<string, TypeColorSet> = {
+@@ -158,16 +159,22 @@ export const KIMI_USAGE_URL = 'https://api.kimi.com/coding/v1/usages';
+  * 构建时可用 VITE_OLLAMA_USAGE_URL 覆盖。
+  */
+ export const OLLAMA_USAGE_ENDPOINT: string =
+-  (import.meta.env?.VITE_OLLAMA_USAGE_URL as string | undefined)?.trim() ||
+-  'http://127.0.0.1:47193/ollama-usage';
++  resolveUsageSidecarUrl(
++    '/ollama-usage',
++    import.meta.env?.VITE_OLLAMA_USAGE_URL as string | undefined
++  );
+ 
+ export const CURSOR_USAGE_ENDPOINT: string =
+-  (import.meta.env?.VITE_CURSOR_USAGE_URL as string | undefined)?.trim() ||
+-  'http://127.0.0.1:47193/cursor-usage';
++  resolveUsageSidecarUrl(
++    '/cursor-usage',
++    import.meta.env?.VITE_CURSOR_USAGE_URL as string | undefined
++  );
+ 
+ export const MUSE_USAGE_ENDPOINT: string =
+-  (import.meta.env?.VITE_MUSE_USAGE_URL as string | undefined)?.trim() ||
+-  'http://127.0.0.1:47193/muse-usage';
++  resolveUsageSidecarUrl(
++    '/muse-usage',
++    import.meta.env?.VITE_MUSE_USAGE_URL as string | undefined
++  );
+ 
+ export const KIMI_REQUEST_HEADERS = {
+   Authorization: 'Bearer $TOKEN$',
+diff --git a/tests/quotaPageLogic.test.ts b/tests/quotaPageLogic.test.ts
+index 859b0dc..dbacc78 100644
+--- a/tests/quotaPageLogic.test.ts
++++ b/tests/quotaPageLogic.test.ts
+@@ -42,6 +42,8 @@ describe('classifyQuotaFiles', () => {
+       'claude',
+       'xai',
+       'antigravity',
++      'kimi',
++      'ollama',
+       'cursor',
+       'muse',
+     ]);
+@@ -51,8 +53,8 @@ describe('classifyQuotaFiles', () => {
+     const entries = classifyQuotaFiles(FILES);
+     expect(entries.map((entry) => entry.file.name)).not.toContain('gemini-a.json');
+     expect(entries.map((entry) => entry.file.name)).not.toContain('claude-off.json');
+-    // Operator-facing providers plus runtime Cursor/Muse cards.
+-    expect(entries).toHaveLength(6);
++    // Configured providers plus runtime Ollama/Cursor/Muse cards.
++    expect(entries).toHaveLength(8);
+   });
+ 
+   test('orders entries by provider tab order', () => {
+@@ -62,6 +64,8 @@ describe('classifyQuotaFiles', () => {
+       'codex',
+       'claude',
+       'xai',
++      'kimi',
++      'ollama',
+       'cursor',
+       'muse',
+     ]);
+@@ -69,20 +73,25 @@ describe('classifyQuotaFiles', () => {
+ });
+ 
+ describe('classifyQuotaFiles — visible provider boundary', () => {
+-  test('excludes Ollama and Kimi from the visible quota surface', () => {
++  test('shows configured Kimi and exactly one runtime-only Ollama card', () => {
+     const entries = classifyQuotaFiles([...FILES, file('ollama-key.json', 'ollama')]);
+-    expect(entries.map((entry) => entry.type)).not.toContain('ollama');
+-    expect(entries.map((entry) => entry.type)).not.toContain('kimi');
++    expect(entries.map((entry) => entry.type)).toContain('kimi');
++    expect(entries.filter((entry) => entry.type === 'ollama')).toHaveLength(1);
++    expect(entries.find((entry) => entry.type === 'ollama')?.file.name).toBe(
++      'ollama-key.json'
++    );
+   });
+ });
+ 
+ describe('buildTabCounts', () => {
+   test('counts per provider plus an all total, zero-filling empty tabs', () => {
+     expect(buildTabCounts(classifyQuotaFiles(FILES))).toEqual({
+-      all: 6,
++      all: 8,
+       claude: 1,
+       antigravity: 0,
+       codex: 2,
++      kimi: 1,
++      ollama: 1,
+       xai: 1,
+       cursor: 1,
+       muse: 1,
+@@ -94,7 +103,7 @@ describe('filterEntriesByTab', () => {
+   const entries = classifyQuotaFiles(FILES);
+ 
+   test("passes everything through on the 'all' tab", () => {
+-    expect(filterEntriesByTab(entries, 'all')).toHaveLength(6);
++    expect(filterEntriesByTab(entries, 'all')).toHaveLength(8);
+   });
+ 
+   test('filters to a single provider', () => {
+@@ -171,6 +180,8 @@ describe('sortQuotaEntries', () => {
+       'claude-a.json',
+       'codex-a.json',
+       'codex-b.json',
++      'kimi-a.json',
++      'Ollama Cloud',
+       'Cursor Ultra',
+       'Muse High Usage',
+     ]);
+@@ -189,6 +200,8 @@ describe('sortQuotaEntries', () => {
+       'codex-a.json',
+       'claude-a.json',
+       'grok-a.json',
++      'kimi-a.json',
++      'Ollama Cloud',
+       'Cursor Ultra',
+       'Muse High Usage',
+     ]);
+diff --git a/src/features/quota/authFilesRetry.ts b/src/features/quota/authFilesRetry.ts
+new file mode 100644
+index 0000000..bf74dd8
+--- /dev/null
++++ b/src/features/quota/authFilesRetry.ts
+@@ -0,0 +1,11 @@
++/** Bounded retry backoff for a failed cold auth-file list. */
++
++export const AUTH_FILES_RETRY_MIN_MS = 5_000;
++export const AUTH_FILES_RETRY_MAX_MS = 60_000;
++
++/** First failure retries after five seconds, then doubles up to one minute. */
++export function authFilesRetryDelayMs(failureCount: number): number {
++  const failures = Number.isFinite(failureCount) ? Math.max(1, Math.floor(failureCount)) : 1;
++  const exponent = Math.min(4, failures - 1);
++  return Math.min(AUTH_FILES_RETRY_MAX_MS, AUTH_FILES_RETRY_MIN_MS * 2 ** exponent);
++}
+diff --git a/src/utils/quota/sidecarFetch.ts b/src/utils/quota/sidecarFetch.ts
+new file mode 100644
+index 0000000..5248d77
+--- /dev/null
++++ b/src/utils/quota/sidecarFetch.ts
+@@ -0,0 +1,118 @@
++/** Timeout and freshness guards shared by local Usage quota sidecars. */
++
++export const SIDECAR_FETCH_TIMEOUT_MS = 12_000;
++export const SIDECAR_STALE_AFTER_MS = 10 * 60_000;
++
++export class SidecarTimeoutError extends Error {
++  constructor() {
++    super('sidecar_timeout');
++    this.name = 'SidecarTimeoutError';
++  }
++}
++
++export class SidecarStaleError extends Error {
++  constructor() {
++    super('sidecar_stale');
++    this.name = 'SidecarStaleError';
++  }
++}
++
++type SidecarWindow = { stale?: boolean };
++
++export type SidecarFreshnessPayload = {
++  stale?: boolean;
++  fetched_at?: string;
++  windows?: SidecarWindow[];
++};
++
++type SidecarJsonResult = { response: Response; payload: unknown };
++const inFlightSidecarJson = new Map<string, Promise<SidecarJsonResult>>();
++
++const isAbortFailure = (error: unknown): boolean =>
++  typeof error === 'object' &&
++  error !== null &&
++  'name' in error &&
++  (error as { name?: unknown }).name === 'AbortError';
++
++export async function fetchSidecarResponse(
++  endpoint: string,
++  fetchImpl: typeof fetch = fetch,
++  timeoutMs: number = SIDECAR_FETCH_TIMEOUT_MS
++): Promise<Response> {
++  const controller = new AbortController();
++  const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
++  try {
++    return await fetchImpl(endpoint, {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      signal: controller.signal,
++    });
++  } catch (error: unknown) {
++    if (controller.signal.aborted && isAbortFailure(error)) throw new SidecarTimeoutError();
++    throw error;
++  } finally {
++    globalThis.clearTimeout(timer);
++  }
++}
++
++/**
++ * Keep the deadline in force until the JSON body has been consumed too.
++ * Fetch resolves as soon as headers arrive; clearing a timer there would leave
++ * a stalled response body able to hold the quota batch loader forever.
++ */
++async function performSidecarJsonFetch<T>(
++  endpoint: string,
++  fetchImpl: typeof fetch,
++  timeoutMs: number
++): Promise<{ response: Response; payload: T }> {
++  const controller = new AbortController();
++  const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
++  try {
++    const response = await fetchImpl(endpoint, {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      signal: controller.signal,
++    });
++    const payload = (await response.json()) as T;
++    return { response, payload };
++  } catch (error: unknown) {
++    if (controller.signal.aborted && isAbortFailure(error)) throw new SidecarTimeoutError();
++    throw error;
++  } finally {
++    globalThis.clearTimeout(timer);
++  }
++}
++
++export function fetchSidecarJson<T>(
++  endpoint: string,
++  fetchImpl: typeof fetch = fetch,
++  timeoutMs: number = SIDECAR_FETCH_TIMEOUT_MS
++): Promise<{ response: Response; payload: T }> {
++  const existing = inFlightSidecarJson.get(endpoint);
++  if (existing) {
++    return existing as Promise<{ response: Response; payload: T }>;
++  }
++  const request = performSidecarJsonFetch<T>(endpoint, fetchImpl, timeoutMs);
++  inFlightSidecarJson.set(endpoint, request as Promise<SidecarJsonResult>);
++  request.then(
++    () => {
++      if (inFlightSidecarJson.get(endpoint) === request) inFlightSidecarJson.delete(endpoint);
++    },
++    () => {
++      if (inFlightSidecarJson.get(endpoint) === request) inFlightSidecarJson.delete(endpoint);
++    }
++  );
++  return request;
++}
++
++/** Missing freshness metadata stays unknown, never guessed as stale. */
++export function isSidecarPayloadStale(
++  payload: SidecarFreshnessPayload | null | undefined,
++  nowMs: number = Date.now()
++): boolean {
++  if (!payload) return false;
++  if (payload.stale || payload.windows?.some((window) => window?.stale)) return true;
++  if (!payload.fetched_at) return false;
++  const fetchedAt = Date.parse(payload.fetched_at);
++  return Number.isFinite(fetchedAt) && nowMs - fetchedAt > SIDECAR_STALE_AFTER_MS;
++}
+diff --git a/src/utils/quota/sidecarUrl.ts b/src/utils/quota/sidecarUrl.ts
+new file mode 100644
+index 0000000..2b04ad4
+--- /dev/null
++++ b/src/utils/quota/sidecarUrl.ts
+@@ -0,0 +1,30 @@
++/**
++ * Resolve a Usage sidecar address without turning a remote browser's localhost
++ * into the quota source. The Usage server is intentionally an HTTP LAN service.
++ */
++
++export type SidecarLocation = {
++  hostname?: string;
++  port?: string;
++};
++
++const fallbackHost = '127.0.0.1';
++const usagePort = '47193';
++
++const bracketIpv6 = (hostname: string) =>
++  hostname.includes(':') && !(hostname.startsWith('[') && hostname.endsWith(']'))
++    ? `[${hostname}]`
++    : hostname;
++
++export function resolveUsageSidecarUrl(
++  path: string,
++  override?: string,
++  locationLike: SidecarLocation | undefined = globalThis.location
++): string {
++  const configured = override?.trim();
++  if (configured) return configured;
++
++  const hostname = locationLike?.hostname?.trim() || fallbackHost;
++  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
++  return `http://${bracketIpv6(hostname)}:${usagePort}${normalizedPath}`;
++}
+diff --git a/tests/authFilesRetry.test.ts b/tests/authFilesRetry.test.ts
+new file mode 100644
+index 0000000..cb72148
+--- /dev/null
++++ b/tests/authFilesRetry.test.ts
+@@ -0,0 +1,20 @@
++import { describe, expect, test } from 'bun:test';
++import {
++  AUTH_FILES_RETRY_MAX_MS,
++  AUTH_FILES_RETRY_MIN_MS,
++  authFilesRetryDelayMs,
++} from '@/features/quota/authFilesRetry';
++
++describe('auth-file list retry backoff', () => {
++  test('starts quickly and doubles to a bounded maximum', () => {
++    expect(authFilesRetryDelayMs(1)).toBe(AUTH_FILES_RETRY_MIN_MS);
++    expect(authFilesRetryDelayMs(2)).toBe(AUTH_FILES_RETRY_MIN_MS * 2);
++    expect(authFilesRetryDelayMs(3)).toBe(AUTH_FILES_RETRY_MIN_MS * 4);
++    expect(authFilesRetryDelayMs(99)).toBe(AUTH_FILES_RETRY_MAX_MS);
++  });
++
++  test('normalizes invalid failure counts to the first retry', () => {
++    expect(authFilesRetryDelayMs(0)).toBe(AUTH_FILES_RETRY_MIN_MS);
++    expect(authFilesRetryDelayMs(Number.NaN)).toBe(AUTH_FILES_RETRY_MIN_MS);
++  });
++});
+diff --git a/tests/connection.test.ts b/tests/connection.test.ts
+new file mode 100644
+index 0000000..40dd463
+--- /dev/null
++++ b/tests/connection.test.ts
+@@ -0,0 +1,36 @@
++import { describe, expect, test } from 'bun:test';
++import {
++  apiBaseFromLocation,
++  computeApiUrl,
++  normalizeApiBase,
++} from '@/utils/connection';
++
++describe('management API connection address', () => {
++  test('maps the local Vite frontend to the management backend port', () => {
++    expect(
++      apiBaseFromLocation({ protocol: 'http:', hostname: 'localhost', port: '5173' })
++    ).toBe('http://localhost:8317');
++  });
++
++  test('maps the Usage monitor CPAMC proxy to the management backend port', () => {
++    expect(
++      apiBaseFromLocation({
++        protocol: 'http:',
++        hostname: '192.168.1.64',
++        port: '47193',
++      })
++    ).toBe('http://192.168.1.64:8317');
++  });
++
++  test('keeps a bundled backend origin and explicit management suffix stable', () => {
++    expect(
++      apiBaseFromLocation({ protocol: 'http:', hostname: 'localhost', port: '8317' })
++    ).toBe('http://localhost:8317');
++    expect(normalizeApiBase('localhost:8317/v0/management')).toBe(
++      'http://localhost:8317'
++    );
++    expect(computeApiUrl('http://localhost:8317')).toBe(
++      'http://localhost:8317/v0/management'
++    );
++  });
++});
+diff --git a/tests/quotaSidecarFetch.test.ts b/tests/quotaSidecarFetch.test.ts
+new file mode 100644
+index 0000000..80cf502
+--- /dev/null
++++ b/tests/quotaSidecarFetch.test.ts
+@@ -0,0 +1,122 @@
++import { describe, expect, test } from 'bun:test';
++import {
++  fetchSidecarResponse,
++  fetchSidecarJson,
++  isSidecarPayloadStale,
++  SIDECAR_STALE_AFTER_MS,
++  SidecarTimeoutError,
++} from '@/utils/quota/sidecarFetch';
++
++describe('quota sidecar fetch', () => {
++  test('aborts a hanging fetch and permits a later recovery request', async () => {
++    let aborted = false;
++    const hanging = ((_url: string, options?: RequestInit) =>
++      new Promise<Response>((_resolve, reject) => {
++        options?.signal?.addEventListener('abort', () => {
++          aborted = true;
++          reject(new DOMException('aborted', 'AbortError'));
++        });
++      })) as typeof fetch;
++
++    await expect(fetchSidecarResponse('http://sidecar.test', hanging, 1)).rejects.toBeInstanceOf(
++      SidecarTimeoutError
++    );
++    expect(aborted).toBe(true);
++
++    const recovered = await fetchSidecarResponse(
++      'http://sidecar.test',
++      (() => Promise.resolve(new Response('{}', { status: 200 }))) as typeof fetch,
++      1
++    );
++    expect(recovered.status).toBe(200);
++  });
++
++  test('keeps the timeout through a body that stalls after headers, then recovers', async () => {
++    let aborted = false;
++    const headersThenStall = ((_url: string, options?: RequestInit) => {
++      const signal = options?.signal;
++      return Promise.resolve({
++        ok: true,
++        status: 200,
++        json: () =>
++          new Promise<never>((_resolve, reject) => {
++            signal?.addEventListener('abort', () => {
++              aborted = true;
++              reject(new DOMException('aborted', 'AbortError'));
++            });
++          }),
++      } as Response);
++    }) as typeof fetch;
++
++    await expect(fetchSidecarJson('http://sidecar.test', headersThenStall, 1)).rejects.toBeInstanceOf(
++      SidecarTimeoutError
++    );
++    expect(aborted).toBe(true);
++
++    const recovered = await fetchSidecarJson<{ ok: boolean }>(
++      'http://sidecar.test',
++      (() => Promise.resolve(new Response('{"ok":true}', { status: 200 }))) as typeof fetch,
++      1
++    );
++    expect(recovered.payload.ok).toBe(true);
++  });
++
++  test('deduplicates concurrent reads of the same sidecar endpoint', async () => {
++    let calls = 0;
++    let release: ((response: Response) => void) | undefined;
++    const deferred = new Promise<Response>((resolve) => {
++      release = resolve;
++    });
++    const fetchOnce = (() => {
++      calls += 1;
++      return deferred;
++    }) as typeof fetch;
++
++    const first = fetchSidecarJson<{ ok: boolean }>('http://single-flight.test', fetchOnce);
++    const second = fetchSidecarJson<{ ok: boolean }>('http://single-flight.test', fetchOnce);
++    expect(calls).toBe(1);
++    release?.(new Response('{"ok":true}', { status: 200 }));
++
++    const [left, right] = await Promise.all([first, second]);
++    expect(left.payload.ok).toBe(true);
++    expect(right.payload.ok).toBe(true);
++  });
++
++  test('does not mislabel a JSON parse failure as a timeout after abort', async () => {
++    const malformedAfterAbort = ((_url: string, options?: RequestInit) =>
++      Promise.resolve({
++        ok: true,
++        status: 200,
++        json: () =>
++          new Promise<never>((_resolve, reject) => {
++            options?.signal?.addEventListener('abort', () => {
++              reject(new SyntaxError('invalid JSON'));
++            });
++          }),
++      } as Response)) as typeof fetch;
++
++    await expect(
++      fetchSidecarJson('http://malformed.test', malformedAfterAbort, 1)
++    ).rejects.toBeInstanceOf(SyntaxError);
++  });
++});
++
++describe('quota sidecar freshness', () => {
++  const now = Date.parse('2026-09-14T22:40:00Z');
++
++  test('fails visibly for declared, per-window, and aged stale data', () => {
++    expect(isSidecarPayloadStale({ stale: true }, now)).toBe(true);
++    expect(isSidecarPayloadStale({ windows: [{ stale: true }] }, now)).toBe(true);
++    expect(
++      isSidecarPayloadStale(
++        { fetched_at: new Date(now - SIDECAR_STALE_AFTER_MS - 1).toISOString() },
++        now
++      )
++    ).toBe(true);
++  });
++
++  test('keeps a fresh or metadata-free response usable', () => {
++    expect(isSidecarPayloadStale({ fetched_at: new Date(now - 1).toISOString() }, now)).toBe(false);
++    expect(isSidecarPayloadStale({ windows: [{}] }, now)).toBe(false);
++  });
++});
+diff --git a/tests/quotaSidecarResponse.test.ts b/tests/quotaSidecarResponse.test.ts
+new file mode 100644
+index 0000000..3ea3542
+--- /dev/null
++++ b/tests/quotaSidecarResponse.test.ts
+@@ -0,0 +1,46 @@
++import { describe, expect, test } from 'bun:test';
++import { requestCursorUsage } from '@/features/quota/providers/cursor/data';
++import { requestMuseUsage } from '@/features/quota/providers/muse/data';
++import { requestOllamaUsage } from '@/features/quota/providers/ollama/data';
++import { SidecarStaleError } from '@/utils/quota/sidecarFetch';
++
++const stalePayload = { ok: true, stale: true, windows: [{ id: 'weekly', used: 12 }] };
++const staleResponse = (() =>
++  Promise.resolve(
++    new Response(JSON.stringify(stalePayload), {
++      status: 200,
++      headers: { 'Content-Type': 'application/json' },
++    })
++  )) as typeof fetch;
++
++describe('quota sidecar response freshness', () => {
++  test('does not accept a declared stale meter as a successful reading', async () => {
++    await expect(requestCursorUsage('http://sidecar.test/cursor', staleResponse)).rejects.toBeInstanceOf(
++      SidecarStaleError
++    );
++    await expect(requestMuseUsage('http://sidecar.test/muse', staleResponse)).rejects.toBeInstanceOf(
++      SidecarStaleError
++    );
++    await expect(requestOllamaUsage('http://sidecar.test/ollama', staleResponse)).rejects.toBeInstanceOf(
++      SidecarStaleError
++    );
++  });
++});
++
++describe('quota sidecar error translations', () => {
++  const locales = ['en', 'ru', 'zh-CN', 'zh-TW'];
++  const providers = ['ollama_quota', 'cursor_quota', 'muse_quota'];
++
++  test('keeps timeout and stale errors available in every supported locale', async () => {
++    for (const locale of locales) {
++      const catalog = (await Bun.file(`src/i18n/locales/${locale}.json`).json()) as Record<
++        string,
++        Record<string, unknown>
++      >;
++      for (const provider of providers) {
++        expect(catalog[provider].timeout).toEqual(expect.any(String));
++        expect(catalog[provider].stale_data).toEqual(expect.any(String));
++      }
++    }
++  });
++});
+diff --git a/tests/quotaSidecarUrl.test.ts b/tests/quotaSidecarUrl.test.ts
+new file mode 100644
+index 0000000..9350641
+--- /dev/null
++++ b/tests/quotaSidecarUrl.test.ts
+@@ -0,0 +1,34 @@
++import { describe, expect, test } from 'bun:test';
++import { resolveUsageSidecarUrl } from '@/utils/quota/sidecarUrl';
++
++describe('Usage quota sidecar URL', () => {
++  test('uses the page hostname for a LAN browser', () => {
++    expect(resolveUsageSidecarUrl('/ollama-usage', undefined, { hostname: '192.168.1.10', port: '5173' })).toBe(
++      'http://192.168.1.10:47193/ollama-usage'
++    );
++  });
++
++  test('keeps the existing Usage origin port', () => {
++    expect(resolveUsageSidecarUrl('/cursor-usage', undefined, { hostname: 'ledger.local', port: '47193' })).toBe(
++      'http://ledger.local:47193/cursor-usage'
++    );
++  });
++
++  test('uses an explicit Vite endpoint without changing it', () => {
++    expect(resolveUsageSidecarUrl('/muse-usage', 'https://usage.example/muse', { hostname: '192.168.1.10' })).toBe(
++      'https://usage.example/muse'
++    );
++  });
++
++  test('falls back to host loopback outside a browser', () => {
++    expect(resolveUsageSidecarUrl('ollama-usage', undefined, undefined)).toBe(
++      'http://127.0.0.1:47193/ollama-usage'
++    );
++  });
++
++  test('does not double-bracket an already bracketed IPv6 browser hostname', () => {
++    expect(resolveUsageSidecarUrl('/muse-usage', undefined, { hostname: '[::1]' })).toBe(
++      'http://[::1]:47193/muse-usage'
++    );
++  });
++});

@@ -1,0 +1,37 @@
+{
+  "checked_at": "2026-09-18T13:58:20Z",
+  "recovery": {
+    "authenticated": true,
+    "mechanism": [
+      "Start building",
+      "Open navigation",
+      "Usage"
+    ],
+    "forced_reload": false
+  },
+  "consecutive_scrapes": [
+    {
+      "ts": "2026-09-18T13:58:18Z",
+      "matched": 1,
+      "provider": "meta",
+      "window": "weekly",
+      "used_pct": 7.0,
+      "ok": true
+    },
+    {
+      "ts": "2026-09-18T13:58:20Z",
+      "matched": 1,
+      "provider": "meta",
+      "window": "weekly",
+      "used_pct": 7.0,
+      "ok": true
+    }
+  ],
+  "sidecar": {
+    "http_status": 200,
+    "ok": true,
+    "windows": 1,
+    "live": true,
+    "stale": false
+  }
+}

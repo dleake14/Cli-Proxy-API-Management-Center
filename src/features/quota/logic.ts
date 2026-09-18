@@ -38,11 +38,12 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType 
  * 把文件列表归类为额度条目：不支持额度或已停用的文件被过滤，
  * 结果按 QUOTA_TAB_ORDER 分组排列（'全部' tab 的卡片顺序即由此决定）。
  *
- * Only the four supported operator-facing providers are in QUOTA_TAB_ORDER;
- * other provider files remain available to their owning surfaces but do not
- * render as quota cards here.
+ * Every provider with a quota adapter is in QUOTA_TAB_ORDER. Providers without
+ * backend auth files use runtime-only synthetic cards and cannot enter auth
+ * mutation flows.
  */
 const RUNTIME_QUOTA_CARDS: ReadonlyArray<{ name: string; type: QuotaProviderType }> = [
+  { name: 'Ollama Cloud', type: 'ollama' },
   { name: 'Cursor Ultra', type: 'cursor' },
   { name: 'Muse High Usage', type: 'muse' },
 ];

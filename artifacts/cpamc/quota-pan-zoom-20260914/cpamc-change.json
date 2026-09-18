@@ -1,0 +1,58 @@
+{
+  "schema": "cpamc-fork-change/v1",
+  "scope": {
+    "must_cover": [
+      "zoom no longer pins today to the left edge; zooming out reveals earlier days to the left AND more future to the right",
+      "zoom keeps the current moment at the same relative position of the span",
+      "horizontal scrolling works when the zoomed span overflows the panel, with the credential label column staying sticky",
+      "future weekly windows are fully visible in the default fit view: the span extends to cover each provider's complete next window, capped at +14 days so a 30-day subscription cannot balloon the view",
+      "next windows remain visually secondary to the live window (faded dashed bars)",
+      "navigating left/right (offset) still works and zoom does not snap the view back to today",
+      "tests updated for the new zoom anchor and next-window coverage"
+    ]
+  },
+  "changed_files": [
+    "src/features/quota/quotaTimelineModel.ts",
+    "src/features/quota/components/QuotaTimeline.tsx",
+    "src/features/quota/components/QuotaTimeline.module.scss",
+    "tests/quotaTimeline.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "exit_code": 0,
+    "log_path": "validation.log"
+  },
+  "evidence": {
+    "diff_path": "diff.patch",
+    "proof_paths": [
+      "proof/build.txt",
+      "proof/render-check.out.txt",
+      "proof/deploy.txt"
+    ]
+  },
+  "rollback": {
+    "command": "cp artifacts/cpamc/quota-pan-zoom-20260914/management.html.before-20260914b /home/david/cli-proxy-api/static/management.html && git apply -R artifacts/cpamc/quota-pan-zoom-20260914/diff.patch",
+    "baseline_ref": "main@e8ee07c plus the uncommitted 2026-09-14 WIP (snapshot diff.patch) and the pre-change served bundle copy"
+  },
+  "ui_change": true,
+  "checks": {
+    "required_paths": [
+      "src/features/quota/components/QuotaTimeline.tsx",
+      "src/features/quota/quotaTimelineModel.ts"
+    ],
+    "required_text": [
+      {
+        "path": "src/features/quota/components/QuotaTimeline.tsx",
+        "contains": "extendSpanToCoverNextWindows"
+      },
+      {
+        "path": "src/features/quota/components/QuotaTimeline.module.scss",
+        "contains": "position: sticky"
+      },
+      {
+        "path": "tests/quotaTimeline.test.ts",
+        "contains": "zooming out reveals earlier days"
+      }
+    ]
+  }
+}

@@ -20,6 +20,7 @@ import {
   scheduledRemainingAt,
   windowsIn,
   zoomCurrentSpan,
+  zoomSpanAtAnchor,
   visibleUsedPercent,
 } from '../src/features/quota/quotaTimelineModel';
 import type { TimelineLane } from '../src/features/quota/quotaTimelineModel';
@@ -28,27 +29,41 @@ const at = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m, d
 
 describe('complete current windows', () => {
   const now = Date.parse('2026-09-12T08:00:00-05:00');
-  const lane = (provider: TimelineLane['provider'], reset: string, periodHours = 168): TimelineLane => ({
-    name: provider, displayName: provider, provider, anchorMs: Date.parse(reset), periodHours,
-    remaining: 80, limits: [], resetCredits: [],
+  const lane = (
+    provider: TimelineLane['provider'],
+    reset: string,
+    periodHours = 168
+  ): TimelineLane => ({
+    name: provider,
+    displayName: provider,
+    provider,
+    anchorMs: Date.parse(reset),
+    periodHours,
+    remaining: 80,
+    limits: [],
+    resetCredits: [],
   });
 
   test('fits every weekly start and reset while keeping Cursor monthly scale bounded', () => {
-    const lanes = [lane('claude', '2026-09-16T02:00:00-05:00'),
+    const lanes = [
+      lane('claude', '2026-09-16T02:00:00-05:00'),
       lane('codex', '2026-09-19T05:30:33-05:00'),
       lane('xai', '2026-09-16T16:28:00-05:00'),
       lane('muse', '2026-09-13T19:00:00-05:00'),
       lane('antigravity', '2026-09-14T12:00:00-05:00'),
       lane('ollama', '2026-09-15T09:00:00-05:00'),
       lane('kimi', '2026-09-18T12:00:00-05:00'),
-      lane('cursor', '2026-09-19T05:47:00-05:00', 720)];
+      lane('cursor', '2026-09-19T05:47:00-05:00', 720),
+    ];
     const span = currentWindowSpan(lanes, now, 15);
     expect(span.startMs).toBe(Date.parse('2026-09-06T00:00:00-05:00'));
     for (const item of lanes.filter((item) => item.provider !== 'cursor')) {
-      const live = projectLane(item, span.startMs, span.endMs, now, 'weekly').find((w) => w.state === 'live')!;
+      const live = projectLane(item, span.startMs, span.endMs, now, 'weekly').find(
+        (w) => w.state === 'live'
+      )!;
       expect(live.startMs).toBeGreaterThanOrEqual(span.startMs);
       expect(live.endMs).toBeLessThanOrEqual(span.endMs);
-      expect(live.widthPercent).toBeCloseTo(100 * 168 * HOUR_MS / (span.endMs - span.startMs));
+      expect(live.widthPercent).toBeCloseTo((100 * 168 * HOUR_MS) / (span.endMs - span.startMs));
     }
   });
 
@@ -57,21 +72,29 @@ describe('complete current windows', () => {
     const session = lane('claude', '2026-09-12T02:00:00-05:00', 5);
     const span = currentWindowSpan([session], midnight, 3);
     expect(span.startMs).toBe(Date.parse('2026-09-11T00:00:00-05:00'));
-    expect(projectLane(session, span.startMs, span.endMs, midnight, 'session').find((w) => w.state === 'live')?.widthPercent)
-      .toBeCloseTo(100 * 5 / 72);
+    expect(
+      projectLane(session, span.startMs, span.endMs, midnight, 'session').find(
+        (w) => w.state === 'live'
+      )?.widthPercent
+    ).toBeCloseTo((100 * 5) / 72);
   });
 
   test('advances at the exact reset without carrying stale usage forward', () => {
     const item = lane('codex', '2026-09-19T05:30:33-05:00');
     const span = currentWindowSpan([item], item.anchorMs!, 15);
-    const live = projectLane(item, span.startMs, span.endMs, item.anchorMs!, 'weekly').find((w) => w.state === 'live')!;
+    const live = projectLane(item, span.startMs, span.endMs, item.anchorMs!, 'weekly').find(
+      (w) => w.state === 'live'
+    )!;
     expect(live.startMs).toBe(item.anchorMs!);
     expect(live.endMs).toBe(item.anchorMs! + 168 * HOUR_MS);
     expect(live.remaining).toBeNull();
   });
 
   test('calendar grid has distinct midnights across both DST changes', () => {
-    for (const [start, hours] of [['2026-03-08T00:00:00-06:00', 23], ['2026-11-01T00:00:00-05:00', 25]] as const) {
+    for (const [start, hours] of [
+      ['2026-03-08T00:00:00-06:00', 23],
+      ['2026-11-01T00:00:00-05:00', 25],
+    ] as const) {
       expect(addCalendarDays(Date.parse(start), 1) - Date.parse(start)).toBe(hours * HOUR_MS);
     }
   });
@@ -244,6 +267,25 @@ describe('extendSpanToCoverNextWindows', () => {
     const base = timelineSpan('weekly', 0, now);
     const empty = lane({ anchorMs: null, periodHours: null });
     expect(extendSpanToCoverNextWindows(base, [empty], now)).toBe(base);
+  });
+
+  test('the extension cap keeps a 30-day subscription from ballooning the view', () => {
+    const now = at(2026, 8, 10, 12);
+    const base = timelineSpan('weekly', 0, now);
+    // Next window ends 30 days after the Sep 12 reset — far beyond any
+    // reasonable fortnight extension.
+    const cursor = lane({
+      name: 'cursor.json',
+      displayName: 'Cursor',
+      provider: 'cursor',
+      anchorMs: at(2026, 8, 12, 20),
+      periodHours: 30 * 24,
+    });
+    const capped = extendSpanToCoverNextWindows(base, [cursor], now, 14);
+    expect(capped).toBe(base);
+    // Uncapped (or a generous cap) still covers it for callers that want it.
+    const uncapped = extendSpanToCoverNextWindows(base, [cursor], now);
+    expect(uncapped.endMs).toBeGreaterThan(base.endMs);
   });
 });
 
@@ -730,9 +772,7 @@ describe('buildTimelineLane', () => {
     });
 
     expect(lanes).toHaveLength(1);
-    expect(lanes[0]?.stackedBars).toEqual([
-      { id: 'weekly', label: 'High Usage', remaining: 34 },
-    ]);
+    expect(lanes[0]?.stackedBars).toEqual([{ id: 'weekly', label: 'High Usage', remaining: 34 }]);
     expect(lanes[0]?.anchorMs).toBeGreaterThan(now);
   });
 
@@ -992,19 +1032,112 @@ describe('zoom and quota clock regressions', () => {
   test('Wednesday 02:00 quota is 62% elapsed on Sunday, independent of zoom', () => {
     expect(scheduledRemainingAt(now, window.startMs, reset)).toBe(38);
     expect(85).toBeGreaterThan(scheduledRemainingAt(now, window.startMs, reset)!);
-    const lane: TimelineLane = { name: 'Claude', displayName: 'Claude', provider: 'claude',
-      anchorMs: reset, periodHours: 168, remaining: 85, limits: [], resetCredits: [] };
+    const lane: TimelineLane = {
+      name: 'Claude',
+      displayName: 'Claude',
+      provider: 'claude',
+      anchorMs: reset,
+      periodHours: 168,
+      remaining: 85,
+      limits: [],
+      resetCredits: [],
+    };
     const fitted = currentWindowSpan([lane], now, 15);
     for (let days = 3; days <= 30; days += 1) {
       const span = zoomCurrentSpan(fitted, now, 'weekly', days);
       expect(span.startMs).toBeLessThanOrEqual(now);
       expect(span.endMs).toBeGreaterThan(now);
-      const live = projectLane(lane, span.startMs, span.endMs, now, 'weekly').find(w => w.state === 'live')!;
+      const live = projectLane(lane, span.startMs, span.endMs, now, 'weekly').find(
+        (w) => w.state === 'live'
+      )!;
       expect(live.startMs).toBe(window.startMs);
       expect(live.endMs).toBe(reset);
       expect(live.remaining).toBe(85);
       expect(scheduledRemainingAt(now, live.startMs, live.endMs)).toBe(38);
     }
+  });
+
+  test('zooming out reveals earlier days without snapping today to the left edge', () => {
+    const lane: TimelineLane = {
+      name: 'Claude',
+      displayName: 'Claude',
+      provider: 'claude',
+      anchorMs: reset,
+      periodHours: 168,
+      remaining: 85,
+      limits: [],
+      resetCredits: [],
+    };
+    const fitted = currentWindowSpan([lane], now, 15);
+    const narrow = zoomCurrentSpan(fitted, now, 'weekly', 7);
+    const wide = zoomCurrentSpan(fitted, now, 'weekly', 30);
+
+    // Zooming out must open up history to the left: today is never pinned as
+    // the earliest visible day.
+    expect(narrow.startMs).toBeLessThan(startOfDay(now));
+    expect(wide.startMs).toBeLessThan(narrow.startMs);
+    // And it must also extend the future to the right.
+    expect(wide.endMs).toBeGreaterThan(narrow.endMs);
+    // The current moment keeps roughly its relative position in the span.
+    const fractionOf = (span: { startMs: number; endMs: number }) =>
+      (now - span.startMs) / (span.endMs - span.startMs);
+    expect(Math.abs(fractionOf(wide) - fractionOf(narrow))).toBeLessThan(0.2);
+    expect(
+      projectLane(lane, narrow.startMs, narrow.endMs, now, 'weekly').filter(
+        (w) => w.state === 'next'
+      ).length
+    ).toBeLessThan(
+      projectLane(lane, wide.startMs, wide.endMs, now, 'weekly').filter((w) => w.state === 'next')
+        .length
+    );
+  });
+
+  test('zoom keeps the date at the viewed viewport position through out-and-back changes', () => {
+    const initial = {
+      startMs: Date.parse('2026-09-01T00:00:00-05:00'),
+      endMs: Date.parse('2026-09-21T00:00:00-05:00'),
+      days: 20,
+    };
+    const viewedPosition = 0.72;
+    const viewedAt = initial.startMs + (initial.endMs - initial.startMs) * viewedPosition;
+    const zoomedOut = zoomSpanAtAnchor(initial, viewedAt, viewedPosition, 'weekly', 30);
+    const zoomedBack = zoomSpanAtAnchor(zoomedOut, viewedAt, viewedPosition, 'weekly', 7);
+
+    for (const span of [zoomedOut, zoomedBack]) {
+      const restoredAt = span.startMs + (span.endMs - span.startMs) * viewedPosition;
+      // Calendar alignment rounds the span to midnight, but the viewed date
+      // remains at the same on-screen position within one calendar day.
+      expect(Math.abs(restoredAt - viewedAt)).toBeLessThanOrEqual(DAY_MS);
+    }
+    expect(zoomedOut.startMs).toBeLessThan(initial.startMs);
+    expect(zoomedBack.startMs).toBeGreaterThan(zoomedOut.startMs);
+  });
+
+  test('the rendered span extends far enough to show the full next weekly window', () => {
+    const lane: TimelineLane = {
+      name: 'Claude',
+      displayName: 'Claude',
+      provider: 'claude',
+      anchorMs: reset,
+      periodHours: 168,
+      remaining: 85,
+      limits: [],
+      resetCredits: [],
+    };
+    const fitted = currentWindowSpan([lane], now, 15);
+    const span = extendSpanToCoverNextWindows(fitted, [lane], now);
+    // The window that opens at the next reset (reset + 7d) is fully inside.
+    expect(span.endMs).toBeGreaterThanOrEqual(reset + 7 * DAY_MS);
+    const projected = projectLane(lane, span.startMs, span.endMs, now, 'weekly');
+    const next = projected.filter((w) => w.state === 'next');
+    expect(next.length).toBeGreaterThanOrEqual(1);
+    // A fully-visible next window is not clipped at the span edge: its drawn
+    // geometry ends strictly inside the span and covers ~the whole period.
+    const firstNext = next.find((w) => w.endMs === reset + 7 * DAY_MS)!;
+    expect(firstNext).toBeDefined();
+    expect(firstNext.leftPercent + firstNext.widthPercent).toBeLessThan(100);
+    const drawnMs = (firstNext.widthPercent / 100) * (span.endMs - span.startMs);
+    expect(drawnMs).toBeGreaterThanOrEqual(6.9 * DAY_MS);
   });
 
   test('clipped usage ends at the original window position, never restarts at the viewport', () => {
@@ -1021,20 +1154,35 @@ describe('zoom and quota clock regressions', () => {
   });
 
   test('failed refresh does not resurrect retained stacked readings as successful', () => {
-    const lanes = buildTimelineLanes({name:'Claude', displayName:'Claude', provider:'claude',
-      quota: {status:'error', windows:[{id:'seven-day-fable', resetAtMs:reset, periodHours:168, usedPercent:15}]} as never,
-      maxPeriodHours:Infinity});
+    const lanes = buildTimelineLanes({
+      name: 'Claude',
+      displayName: 'Claude',
+      provider: 'claude',
+      quota: {
+        status: 'error',
+        windows: [{ id: 'seven-day-fable', resetAtMs: reset, periodHours: 168, usedPercent: 15 }],
+      } as never,
+      maxPeriodHours: Infinity,
+    });
     expect(lanes[0].anchorMs).toBeNull();
     expect(lanes[0].stackedBars).toBeUndefined();
   });
 
   test('independent Claude pools keep their own reset clocks', () => {
-    const lanes = buildTimelineLanes({name:'Claude', displayName:'Claude', provider:'claude',
-      quota: {status:'success', windows:[
-        {id:'seven-day-fable', resetAtMs:reset, periodHours:168, usedPercent:15},
-        {id:'seven-day', resetAtMs:reset + DAY_MS, periodHours:168, usedPercent:20},
-      ]} as never, maxPeriodHours:Infinity});
-    expect(lanes.map(lane => lane.anchorMs)).toEqual([reset, reset + DAY_MS]);
-    expect(lanes.map(lane => lane.remaining)).toEqual([85,80]);
+    const lanes = buildTimelineLanes({
+      name: 'Claude',
+      displayName: 'Claude',
+      provider: 'claude',
+      quota: {
+        status: 'success',
+        windows: [
+          { id: 'seven-day-fable', resetAtMs: reset, periodHours: 168, usedPercent: 15 },
+          { id: 'seven-day', resetAtMs: reset + DAY_MS, periodHours: 168, usedPercent: 20 },
+        ],
+      } as never,
+      maxPeriodHours: Infinity,
+    });
+    expect(lanes.map((lane) => lane.anchorMs)).toEqual([reset, reset + DAY_MS]);
+    expect(lanes.map((lane) => lane.remaining)).toEqual([85, 80]);
   });
 });
