@@ -601,7 +601,7 @@ export function MainLayout() {
       labelKey: 'nav_groups.operate',
       items: [
         {
-          path: '/',
+          path: '/dashboard',
           labelKey: 'nav.dashboard',
           metaKey: 'nav_meta.dashboard',
           icon: sidebarIcons.dashboard,
