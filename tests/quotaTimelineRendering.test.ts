@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import '../src/i18n/index';
+import i18n from '../src/i18n/index';
 import { QuotaTimeline } from '../src/features/quota/components/QuotaTimeline';
 import type { QuotaFileEntry } from '../src/features/quota/logic';
 import { buildKimiQuotaRows } from '../src/utils/quota';
@@ -19,6 +19,10 @@ const baseProps = {
   resolvedTheme: 'light' as const,
   now: new Date(2026, 6, 29, 12).getTime(),
 };
+
+beforeAll(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('QuotaTimeline rendering', () => {
   test('default render contains both ends of the current quota and preserves weekly selection at close zoom', () => {
@@ -239,7 +243,7 @@ describe('QuotaTimeline rendering', () => {
     expect(markup).toMatch(/title="[^"]*57%[^"]*"/);
   });
 
-  test('renders the draggable zoom slider under the chart', () => {
+  test('zoom changes scale while keeping the projected date range fixed', () => {
     const reset = new Date(2026, 7, 5, 12).getTime();
     const markup = renderToStaticMarkup(
       createElement(QuotaTimeline, {
@@ -259,13 +263,26 @@ describe('QuotaTimeline rendering', () => {
       })
     );
 
-    expect(markup).toContain('type="range"');
-    expect(markup).toContain('min="3"');
-    expect(markup).toContain('max="30"');
-    expect(markup).toContain('value="7"');
+    const wide = renderToStaticMarkup(
+      createElement(QuotaTimeline, {
+        ...baseProps,
+        initialZoomDays: 30,
+        quotaFor: () => ({
+          status: 'success',
+          windows: [{ label: '7-day', usedPercent: 25, resetAtMs: reset, periodHours: 168 }],
+        }),
+      })
+    );
+    const range = (html: string) => html.match(/data-span-start-ms="(\d+)" data-span-end-ms="(\d+)"/)?.slice(1);
+    const width = (html: string) => Number(html.match(/--timeline-min-width:(\d+(?:\.\d+)?)px/)?.[1]);
+    expect(range(markup)).toEqual(range(wide));
+    expect(width(markup)).toBeGreaterThan(width(wide));
+    expect(markup).toContain('aria-label="Zoom in"');
+    expect(markup).toContain('aria-label="Zoom out"');
+    expect(markup).toContain('>Fit</button>');
   });
 
-  test('renders explicit horizontal controls and the Shift-wheel scrolling affordance', () => {
+  test('renders explicit horizontal controls without a wheel interception hint', () => {
     const markup = renderToStaticMarkup(
       createElement(QuotaTimeline, {
         ...baseProps,
@@ -284,7 +301,7 @@ describe('QuotaTimeline rendering', () => {
       })
     );
 
-    expect(markup).toContain('Shift + mouse wheel scrolls sideways');
+    expect(markup).not.toContain('Shift + mouse wheel scrolls sideways');
     expect(markup).toContain('aria-label="Scroll timeline left"');
     expect(markup).toContain('aria-label="Scroll timeline right"');
     expect(markup).toContain('aria-label="Quota window timeline"');

@@ -8,7 +8,6 @@ import { ANTIGRAVITY_CONFIG } from './providers/antigravity/data';
 import { CLAUDE_CONFIG } from './providers/claude/data';
 import { CODEX_CONFIG } from './providers/codex/data';
 import { KIMI_CONFIG } from './providers/kimi/data';
-import { OLLAMA_CONFIG } from './providers/ollama/data';
 import { XAI_CONFIG } from './providers/xai/data';
 import { CURSOR_CONFIG } from './providers/cursor/data';
 import { MUSE_CONFIG } from './providers/muse/data';
@@ -20,7 +19,6 @@ const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolea
   claude: CLAUDE_CONFIG.filterFn,
   codex: CODEX_CONFIG.filterFn,
   kimi: KIMI_CONFIG.filterFn,
-  ollama: OLLAMA_CONFIG.filterFn,
   xai: XAI_CONFIG.filterFn,
   cursor: CURSOR_CONFIG.filterFn,
   muse: MUSE_CONFIG.filterFn,
@@ -43,7 +41,6 @@ export const resolveQuotaProviderType = (file: AuthFileItem): QuotaProviderType 
  * mutation flows.
  */
 const RUNTIME_QUOTA_CARDS: ReadonlyArray<{ name: string; type: QuotaProviderType }> = [
-  { name: 'Ollama Cloud', type: 'ollama' },
   { name: 'Cursor Ultra', type: 'cursor' },
   { name: 'Muse High Usage', type: 'muse' },
 ];
@@ -144,7 +141,7 @@ const accountHint = (file: AuthFileItem): string => {
  * 卡头不再展示原始凭证文件名（超长的 JSON 文件名很难读），改用提供商短品牌名
  * （Codex / Claude / Gemini / Grok / Kimi…，由调用方传入的 labelFor 从 i18n 取）。
  * 规则：
- * - 运行时虚拟卡（如 Ollama Cloud）直接用 file.name，本身就是短文案；
+ * - 运行时虚拟卡直接用 file.name，本身就是短文案；
  * - 同一提供商只有一张卡 → 直接用类型标签；
  * - 同一提供商有多张卡 → 追加账号区分（邮箱/文件名），同名再加序号避免歧义。
  *

@@ -14,7 +14,6 @@ import type {
   KimiQuotaState,
   CursorQuotaState,
   MuseQuotaState,
-  OllamaQuotaState,
   XaiQuotaState,
 } from '@/types';
 
@@ -25,7 +24,6 @@ export type QuotaProviderType =
   | 'claude'
   | 'codex'
   | 'kimi'
-  | 'ollama'
   | 'xai'
   | 'cursor'
   | 'muse';
@@ -36,7 +34,6 @@ export interface QuotaStore {
   claudeQuota: Record<string, ClaudeQuotaState>;
   codexQuota: Record<string, CodexQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
-  ollamaQuota: Record<string, OllamaQuotaState>;
   xaiQuota: Record<string, XaiQuotaState>;
   cursorQuota: Record<string, CursorQuotaState>;
   museQuota: Record<string, MuseQuotaState>;
@@ -44,7 +41,6 @@ export interface QuotaStore {
   setClaudeQuota: (updater: QuotaUpdater<Record<string, ClaudeQuotaState>>) => void;
   setCodexQuota: (updater: QuotaUpdater<Record<string, CodexQuotaState>>) => void;
   setKimiQuota: (updater: QuotaUpdater<Record<string, KimiQuotaState>>) => void;
-  setOllamaQuota: (updater: QuotaUpdater<Record<string, OllamaQuotaState>>) => void;
   setXaiQuota: (updater: QuotaUpdater<Record<string, XaiQuotaState>>) => void;
   setCursorQuota: (updater: QuotaUpdater<Record<string, CursorQuotaState>>) => void;
   setMuseQuota: (updater: QuotaUpdater<Record<string, MuseQuotaState>>) => void;

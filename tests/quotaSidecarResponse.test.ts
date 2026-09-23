@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { requestCursorUsage } from '@/features/quota/providers/cursor/data';
 import { requestMuseUsage } from '@/features/quota/providers/muse/data';
-import { requestOllamaUsage } from '@/features/quota/providers/ollama/data';
 import { SidecarStaleError } from '@/utils/quota/sidecarFetch';
 
 const stalePayload = { ok: true, stale: true, windows: [{ id: 'weekly', used: 12 }] };
@@ -21,15 +20,12 @@ describe('quota sidecar response freshness', () => {
     await expect(requestMuseUsage('http://sidecar.test/muse', staleResponse)).rejects.toBeInstanceOf(
       SidecarStaleError
     );
-    await expect(requestOllamaUsage('http://sidecar.test/ollama', staleResponse)).rejects.toBeInstanceOf(
-      SidecarStaleError
-    );
   });
 });
 
 describe('quota sidecar error translations', () => {
   const locales = ['en', 'ru', 'zh-CN', 'zh-TW'];
-  const providers = ['ollama_quota', 'cursor_quota', 'muse_quota'];
+  const providers = ['cursor_quota', 'muse_quota'];
 
   test('keeps timeout and stale errors available in every supported locale', async () => {
     for (const locale of locales) {

@@ -140,7 +140,6 @@ export function QuotaPage() {
   const claudeQuota = useQuotaStore((state) => state.claudeQuota);
   const codexQuota = useQuotaStore((state) => state.codexQuota);
   const kimiQuota = useQuotaStore((state) => state.kimiQuota);
-  const ollamaQuota = useQuotaStore((state) => state.ollamaQuota);
   const xaiQuota = useQuotaStore((state) => state.xaiQuota);
   const cursorQuota = useQuotaStore((state) => state.cursorQuota);
   const museQuota = useQuotaStore((state) => state.museQuota);
@@ -152,12 +151,11 @@ export function QuotaPage() {
         claude: claudeQuota,
         codex: codexQuota,
         kimi: kimiQuota,
-        ollama: ollamaQuota,
         xai: xaiQuota,
         cursor: cursorQuota,
         muse: museQuota,
       }) as unknown as Record<QuotaProviderType, Record<string, QuotaCardState>>,
-    [antigravityQuota, claudeQuota, codexQuota, kimiQuota, ollamaQuota, xaiQuota, cursorQuota, museQuota]
+    [antigravityQuota, claudeQuota, codexQuota, kimiQuota, xaiQuota, cursorQuota, museQuota]
   );
 
   const getQuota = useCallback(

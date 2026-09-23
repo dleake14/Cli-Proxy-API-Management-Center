@@ -30,7 +30,6 @@ export type QuotaProviderType =
   | 'claude'
   | 'codex'
   | 'kimi'
-  | 'ollama'
   | 'xai'
   | 'cursor'
   | 'muse';
@@ -41,7 +40,6 @@ export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
   'claude',
   'codex',
   'kimi',
-  'ollama',
   'xai',
   'cursor',
   'muse',
@@ -72,7 +70,6 @@ export const AUTH_FILE_MANUAL_REFRESH_PROVIDERS = new Set([
   'claude',
   'codex',
   'kimi',
-  'ollama',
   'xai',
   'cursor',
   'muse',
@@ -90,7 +87,6 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   xai: { light: iconGrok, dark: iconGrokDark },
   iflow: iconIflow,
   kimi: { light: iconKimiDark, dark: iconKimiLight },
-  ollama: iconOllama,
   cursor: iconOllama,
   muse: iconOllama,
   qwen: iconQwen,

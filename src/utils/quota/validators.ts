@@ -27,10 +27,6 @@ export function isKimiFile(file: AuthFileItem): boolean {
   return resolveAuthProvider(file) === 'kimi';
 }
 
-export function isOllamaFile(file: AuthFileItem): boolean {
-  return resolveAuthProvider(file) === 'ollama';
-}
-
 export function isCursorFile(file: AuthFileItem): boolean {
   return resolveAuthProvider(file) === 'cursor';
 }

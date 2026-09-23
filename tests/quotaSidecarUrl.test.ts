@@ -3,8 +3,8 @@ import { resolveUsageSidecarUrl } from '@/utils/quota/sidecarUrl';
 
 describe('Usage quota sidecar URL', () => {
   test('uses the page hostname for a LAN browser', () => {
-    expect(resolveUsageSidecarUrl('/ollama-usage', undefined, { hostname: '192.168.1.10', port: '5173' })).toBe(
-      'http://192.168.1.10:47193/ollama-usage'
+    expect(resolveUsageSidecarUrl('/muse-usage', undefined, { hostname: '192.168.1.10', port: '5173' })).toBe(
+      'http://192.168.1.10:47193/muse-usage'
     );
   });
 
@@ -21,8 +21,8 @@ describe('Usage quota sidecar URL', () => {
   });
 
   test('falls back to host loopback outside a browser', () => {
-    expect(resolveUsageSidecarUrl('ollama-usage', undefined, undefined)).toBe(
-      'http://127.0.0.1:47193/ollama-usage'
+    expect(resolveUsageSidecarUrl('cursor-usage', undefined, undefined)).toBe(
+      'http://127.0.0.1:47193/cursor-usage'
     );
   });
 

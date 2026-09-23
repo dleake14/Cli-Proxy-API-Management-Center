@@ -310,11 +310,8 @@ export interface KimiQuotaState {
   errorStatus?: number;
 }
 
-/**
- * Ollama 额度行。used/limit 都是百分比（limit 恒为 100），因为 Ollama Cloud
- * 的 /api/usage 直接下发归一化用量分数，而不是原始计数。
- */
-export interface OllamaQuotaRow {
+/** Shared quota row for the local Cursor and Muse usage sidecars. */
+export interface UsageSidecarQuotaRow {
   id: string;
   label?: string;
   /** 已用百分比 0..100。 */
@@ -327,17 +324,17 @@ export interface OllamaQuotaRow {
   periodHours?: number | null;
 }
 
-export interface OllamaQuotaState {
+export interface UsageSidecarQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
-  rows: OllamaQuotaRow[];
+  rows: UsageSidecarQuotaRow[];
   error?: string;
   errorStatus?: number;
 }
 
-export type CursorQuotaRow = OllamaQuotaRow;
-export type CursorQuotaState = OllamaQuotaState;
-export type MuseQuotaRow = OllamaQuotaRow;
-export type MuseQuotaState = OllamaQuotaState;
+export type CursorQuotaRow = UsageSidecarQuotaRow;
+export type CursorQuotaState = UsageSidecarQuotaState;
+export type MuseQuotaRow = UsageSidecarQuotaRow;
+export type MuseQuotaState = UsageSidecarQuotaState;
 
 // xAI/Grok API payload types
 export interface XaiBillingCent {

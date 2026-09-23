@@ -11,6 +11,7 @@ import { QuotaMeter } from '../../components/QuotaMeter';
 import { QuotaResetLabel } from '../../components/QuotaResetLabel';
 import { collectQuotaRowInstants, pickUrgentRowId } from '../../resetSchedule';
 import type { QuotaBodyProps } from '../../types';
+import { activeClaudeResetOffers } from './resetOffer';
 
 export function ClaudeQuotaBody({ quota, classes }: QuotaBodyProps<ClaudeQuotaState>) {
   const { t, i18n } = useTranslation();
@@ -22,6 +23,7 @@ export function ClaudeQuotaBody({ quota, classes }: QuotaBodyProps<ClaudeQuotaSt
   const windows = quota.windows ?? [];
   const extraUsage = quota.extraUsage ?? null;
   const planType = quota.planType ?? null;
+  const resetOffers = useMemo(() => activeClaudeResetOffers(now), [now]);
 
   return (
     <>
@@ -39,6 +41,13 @@ export function ClaudeQuotaBody({ quota, classes }: QuotaBodyProps<ClaudeQuotaSt
           </span>
         </div>
       )}
+      {resetOffers.map((offer) => (
+        <div key={offer.id} className={classes.codexPlan}>
+          <span className={classes.codexPlanValue} style={{ textTransform: 'none' }}>
+            {t('claude_quota.free_reset_value', { date: offer.expiresLabel })}
+          </span>
+        </div>
+      ))}
       {windows.length === 0 ? (
         <div className={classes.quotaMessage}>{t('claude_quota.empty_windows')}</div>
       ) : (

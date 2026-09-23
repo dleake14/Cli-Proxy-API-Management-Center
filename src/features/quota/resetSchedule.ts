@@ -131,7 +131,7 @@ export function collectQuotaRowInstants(
     return collectRows(buckets, 'bucket');
   }
 
-  if (provider === 'kimi' || provider === 'ollama' || provider === 'cursor' || provider === 'muse') {
+  if (provider === 'kimi' || provider === 'cursor' || provider === 'muse') {
     const rows = (quota as { rows?: WindowLike[] }).rows ?? [];
     const visible =
       provider === 'cursor' ? rows.filter((row) => isCursorTimelineRow(row.id)) : rows;
