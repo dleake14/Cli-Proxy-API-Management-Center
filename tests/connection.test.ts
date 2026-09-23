@@ -33,4 +33,12 @@ describe('management API connection address', () => {
       'http://localhost:8317/v0/management'
     );
   });
+
+  test('repairs a saved frontend origin before restoring a session', () => {
+    expect(normalizeApiBase('http://127.0.0.1:5173')).toBe('http://127.0.0.1:8317');
+    expect(normalizeApiBase('http://192.168.1.64:47193')).toBe('http://192.168.1.64:8317');
+    expect(computeApiUrl('http://127.0.0.1:5173')).toBe(
+      'http://127.0.0.1:8317/v0/management'
+    );
+  });
 });

@@ -16,6 +16,18 @@ export const normalizeApiBase = (input: string): string => {
   if (!/^https?:\/\//i.test(base)) {
     base = `http://${base}`;
   }
+  // Old browser sessions may have saved the Vite or Usage page origin as the
+  // API base. Those servers return index.html for unknown paths, including
+  // /v0/management/config, so a 200 alone cannot prove a connection.
+  try {
+    const url = new URL(base);
+    if (LOCAL_FRONTEND_PORTS.has(url.port)) {
+      url.port = String(DEFAULT_API_PORT);
+      base = url.toString().replace(/\/+$/, '');
+    }
+  } catch {
+    // Preserve the existing normalization behavior for malformed input.
+  }
   return base;
 };
 
