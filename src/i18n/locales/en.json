@@ -96,6 +96,7 @@
     "status": "Connection Status:"
   },
   "nav": {
+    "windows": "Windows",
     "dashboard": "Dashboard",
     "quick_start": "Quick Start",
     "ai_providers": "AI Providers",
@@ -116,6 +117,7 @@
     "control": "Control"
   },
   "nav_meta": {
+    "windows": "Usage windows",
     "dashboard": "Operations overview",
     "quick_start": "APIKEY.FUN setup",
     "ai_providers": "Upstream model routing",

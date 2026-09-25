@@ -41,6 +41,8 @@ import styles from './QuotaTimeline.module.scss';
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const TIMELINE_TIME_ZONE = 'America/Chicago';
 const TIMELINE_LANE_WIDTH_PX = 210;
+/** Pixel width one "09/23" date label needs before neighbours collide. */
+const TIMELINE_DAY_LABEL_PX = 46;
 const EN_WEEKDAY_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -260,6 +262,13 @@ export function QuotaTimeline({
     const zoomed = mode === 'session';
     const count = zoomed ? span.days * 4 : span.days;
     const todayKey = formatDay(now);
+    // Thin the labels by the pixel width a day actually gets, not by the zoom
+    // number: a narrow window at 17 days is as dense as a wide one at 30.
+    // Count the thinning from today so today's column always carries a label
+    // and the now/pace marker never reads as the neighbouring day.
+    const todayDay = Math.floor((now - span.startMs) / (24 * 60 * 60_000));
+    const dayPx = calendarWidth / Math.max(1, span.days);
+    const labelStep = zoomed ? 1 : Math.max(1, Math.ceil(TIMELINE_DAY_LABEL_PX / dayPx));
 
     return Array.from({ length: count }, (_, index) => {
       const day = Math.floor(index / (zoomed ? 4 : 1));
@@ -273,9 +282,7 @@ export function QuotaTimeline({
         at,
         widthPercent: ((dayEnd - dayStart) / (zoomed ? 4 : 1) / (span.endMs - span.startMs)) * 100,
         isDayStart,
-        // Dense spans drop every other date so the labels never collide once the
-        // chart is packed into the panel width instead of scrolling sideways.
-        showLabel: isDayStart && (zoomed || zoomDays <= 18 || day % 2 === 0),
+        showLabel: isDayStart && (day - todayDay) % labelStep === 0,
         isToday: formatDay(at) === todayKey,
         isWeekend: dayIndex === 0 || dayIndex === 6,
         weekday: t(`quota_management.weekday_${WEEKDAY_KEYS[dayIndex]}`, {
@@ -284,7 +291,7 @@ export function QuotaTimeline({
         label: isDayStart ? formatDay(at) : `${date.hour}:00`,
       };
     });
-  }, [mode, span, zoomDays, now, t]);
+  }, [mode, span, calendarWidth, now, t]);
 
   // Only draw the marker when the current moment is actually on screen.
   const nowPercent =
@@ -633,7 +640,10 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
   const nextResetLabel =
     nextResetMs === null
       ? null
-      : `${t('quota_management.windows_next_reset', { defaultValue: 'Reset' })} ${formatDay(nextResetMs)} ${formatTime(nextResetMs)}`;
+      : `${t('quota_management.windows_next_reset', { defaultValue: 'Reset' })} ${t(
+          `quota_management.weekday_${WEEKDAY_KEYS[weekdayIndex(nextResetMs)]}`,
+          { defaultValue: WEEKDAY_KEYS[weekdayIndex(nextResetMs)] }
+        )} ${formatDay(nextResetMs)} ${formatTime(nextResetMs)}`;
 
   // Sub-day windows are labelled in hours — rounding 5h to days gives "0d".
   const periodLabel =

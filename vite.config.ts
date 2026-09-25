@@ -45,7 +45,12 @@ export default defineConfig({
   ],
   server: {
     host: '0.0.0.0',
-    port: 5173
+    port: 5173,
+    // Same-origin path for the Usage server's quota-windows page so the
+    // embedded frame never depends on a second host name or port.
+    proxy: {
+      '/quota-windows': { target: 'http://127.0.0.1:47193', changeOrigin: true }
+    }
   },
   define: {
     __APP_VERSION__: JSON.stringify(getVersion())

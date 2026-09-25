@@ -96,6 +96,7 @@
     "status": "Статус подключения:"
   },
   "nav": {
+    "windows": "Windows",
     "dashboard": "Панель",
     "quick_start": "Быстрый старт",
     "ai_providers": "Поставщики AI",
@@ -115,6 +116,7 @@
     "control": "Управление"
   },
   "nav_meta": {
+    "windows": "Usage windows",
     "dashboard": "Обзор работы",
     "quick_start": "Настройка APIKEY.FUN",
     "ai_providers": "Маршрутизация моделей",

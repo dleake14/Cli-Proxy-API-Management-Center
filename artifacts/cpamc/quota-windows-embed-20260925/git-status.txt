@@ -1,0 +1,21 @@
+ M src/components/layout/MainLayout.tsx
+ M src/components/ui/icons.tsx
+ M src/features/quota/components/QuotaTimeline.module.scss
+ M src/features/quota/components/QuotaTimeline.tsx
+ M src/i18n/locales/en.json
+ M src/i18n/locales/ru.json
+ M src/i18n/locales/zh-CN.json
+ M src/i18n/locales/zh-TW.json
+ M src/router/routeConfig.tsx
+ M tests/defaultRoute.test.ts
+?? artifacts/cpamc/claude-free-reset-20260922/
+?? artifacts/cpamc/management-base-repair-20260923/
+?? artifacts/cpamc/proxy-assets-repair-20260923/
+?? artifacts/cpamc/quota-default-window-20260922/
+?? artifacts/cpamc/quota-windows-embed-20260925/
+?? artifacts/cpamc/quota-zoom-copy-20260923/
+?? artifacts/cpamc/remove-ollama-cloud-20260922/
+?? artifacts/cpamc/timeline-wide-zoom-20260923/
+?? src/pages/QuotaWindowsPage.module.scss
+?? src/pages/QuotaWindowsPage.tsx
+?? tools/ensure-cpamc.sh

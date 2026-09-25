@@ -96,6 +96,7 @@
     "status": "連線狀態:"
   },
   "nav": {
+    "windows": "Windows",
     "dashboard": "儀表板",
     "quick_start": "快速開始",
     "ai_providers": "AI 供應商",
@@ -116,6 +117,7 @@
     "control": "控制"
   },
   "nav_meta": {
+    "windows": "Usage windows",
     "dashboard": "運行總覽",
     "quick_start": "APIKEY.FUN 快速設定",
     "ai_providers": "上游模型路由",

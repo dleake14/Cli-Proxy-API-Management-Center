@@ -1,0 +1,211 @@
+diff --git a/src/components/layout/MainLayout.tsx b/src/components/layout/MainLayout.tsx
+index 2d7a50c..898141e 100644
+--- a/src/components/layout/MainLayout.tsx
++++ b/src/components/layout/MainLayout.tsx
+@@ -27,6 +27,7 @@ import {
+   IconSidebarProviders,
+   IconSidebarQuickStart,
+   IconSidebarQuota,
++  IconSidebarWindows,
+   IconSidebarStore,
+   IconSidebarSystem,
+   IconChevronDown,
+@@ -61,6 +62,7 @@ const sidebarIcons: Record<string, ReactNode> = {
+   authFiles: <IconSidebarAuthFiles size={18} />,
+   oauth: <IconSidebarOauth size={18} />,
+   quota: <IconSidebarQuota size={18} />,
++  windows: <IconSidebarWindows size={18} />,
+   plugins: <IconSidebarPlugins size={18} />,
+   pluginStore: <IconSidebarStore size={18} />,
+   config: <IconSidebarConfig size={18} />,
+@@ -643,6 +645,12 @@ export function MainLayout() {
+       id: 'observe',
+       labelKey: 'nav_groups.observe',
+       items: [
++        {
++          path: '/windows',
++          labelKey: 'nav.windows',
++          metaKey: 'nav_meta.windows',
++          icon: sidebarIcons.windows,
++        },
+         {
+           path: '/quota',
+           labelKey: 'nav.quota_management',
+diff --git a/src/components/ui/icons.tsx b/src/components/ui/icons.tsx
+index f297075..2d489a1 100644
+--- a/src/components/ui/icons.tsx
++++ b/src/components/ui/icons.tsx
+@@ -489,6 +489,16 @@ export function IconSidebarQuota({ size = 20, ...props }: IconProps) {
+   );
+ }
+ 
++export function IconSidebarWindows({ size = 20, ...props }: IconProps) {
++  return (
++    <svg {...baseSvgProps} width={size} height={size} {...props}>
++      <rect width="18" height="18" x="3" y="3" rx="2" />
++      <path d="M3 9h18" />
++      <path d="M9 21V9" />
++    </svg>
++  );
++}
++
+ export const IconSidebarLogs = IconScrollText;
+ 
+ export function IconSidebarSystem({ size = 20, ...props }: IconProps) {
+diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
+index 762a595..53554bb 100644
+--- a/src/i18n/locales/en.json
++++ b/src/i18n/locales/en.json
+@@ -96,6 +96,7 @@
+     "status": "Connection Status:"
+   },
+   "nav": {
++    "windows": "Windows",
+     "dashboard": "Dashboard",
+     "quick_start": "Quick Start",
+     "ai_providers": "AI Providers",
+@@ -116,6 +117,7 @@
+     "control": "Control"
+   },
+   "nav_meta": {
++    "windows": "Usage windows",
+     "dashboard": "Operations overview",
+     "quick_start": "APIKEY.FUN setup",
+     "ai_providers": "Upstream model routing",
+diff --git a/src/i18n/locales/ru.json b/src/i18n/locales/ru.json
+index 6de5310..3c85a6d 100644
+--- a/src/i18n/locales/ru.json
++++ b/src/i18n/locales/ru.json
+@@ -96,6 +96,7 @@
+     "status": "Статус подключения:"
+   },
+   "nav": {
++    "windows": "Windows",
+     "dashboard": "Панель",
+     "quick_start": "Быстрый старт",
+     "ai_providers": "Поставщики AI",
+@@ -115,6 +116,7 @@
+     "control": "Управление"
+   },
+   "nav_meta": {
++    "windows": "Usage windows",
+     "dashboard": "Обзор работы",
+     "quick_start": "Настройка APIKEY.FUN",
+     "ai_providers": "Маршрутизация моделей",
+diff --git a/src/i18n/locales/zh-CN.json b/src/i18n/locales/zh-CN.json
+index ec2c6ea..8ea007c 100644
+--- a/src/i18n/locales/zh-CN.json
++++ b/src/i18n/locales/zh-CN.json
+@@ -96,6 +96,7 @@
+     "status": "连接状态:"
+   },
+   "nav": {
++    "windows": "Windows",
+     "dashboard": "仪表盘",
+     "quick_start": "快速开始",
+     "ai_providers": "AI 提供商",
+@@ -116,6 +117,7 @@
+     "control": "控制"
+   },
+   "nav_meta": {
++    "windows": "Usage windows",
+     "dashboard": "运行总览",
+     "quick_start": "快速配置",
+     "ai_providers": "上游模型路由",
+diff --git a/src/i18n/locales/zh-TW.json b/src/i18n/locales/zh-TW.json
+index 702cd42..cda5782 100644
+--- a/src/i18n/locales/zh-TW.json
++++ b/src/i18n/locales/zh-TW.json
+@@ -96,6 +96,7 @@
+     "status": "連線狀態:"
+   },
+   "nav": {
++    "windows": "Windows",
+     "dashboard": "儀表板",
+     "quick_start": "快速開始",
+     "ai_providers": "AI 供應商",
+@@ -116,6 +117,7 @@
+     "control": "控制"
+   },
+   "nav_meta": {
++    "windows": "Usage windows",
+     "dashboard": "運行總覽",
+     "quick_start": "APIKEY.FUN 快速設定",
+     "ai_providers": "上游模型路由",
+diff --git a/src/router/routeConfig.tsx b/src/router/routeConfig.tsx
+index ad4d796..f05068a 100644
+--- a/src/router/routeConfig.tsx
++++ b/src/router/routeConfig.tsx
+@@ -6,6 +6,7 @@ import { AuthFilesOAuthExcludedEditPage } from '@/pages/AuthFilesOAuthExcludedEd
+ import { AuthFilesOAuthModelAliasEditPage } from '@/pages/AuthFilesOAuthModelAliasEditPage';
+ import { OAuthPage } from '@/pages/OAuthPage';
+ import { QuotaPage } from '@/features/quota/QuotaPage';
++import { QuotaWindowsPage } from '@/pages/QuotaWindowsPage';
+ import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
+ import { PluginsPage } from '@/features/plugins/PluginsPage';
+ import { PluginStorePage } from '@/features/plugins/PluginStorePage';
+@@ -15,7 +16,7 @@ import { SystemPage } from '@/pages/SystemPage';
+ 
+ export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
+   [
+-    { path: '/', element: <Navigate to="/quota" replace /> },
++    { path: '/', element: <Navigate to="/windows" replace /> },
+     { path: '/dashboard', element: <DashboardPage /> },
+     { path: '/settings', element: <Navigate to="/config" replace /> },
+     { path: '/api-keys', element: <Navigate to="/config" replace /> },
+@@ -27,6 +28,7 @@ export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
+     { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
+     { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
+     { path: '/oauth', element: <OAuthPage /> },
++    { path: '/windows', element: <QuotaWindowsPage /> },
+     { path: '/quota', element: <QuotaPage /> },
+     ...(supportsPlugin
+       ? [
+@@ -43,5 +45,5 @@ export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
+     { path: '/config', element: <ConfigPage /> },
+     { path: '/logs', element: <LogsPage /> },
+     { path: '/system', element: <SystemPage /> },
+-    { path: '*', element: <Navigate to="/quota" replace /> },
++    { path: '*', element: <Navigate to="/windows" replace /> },
+   ];
+diff --git a/tests/defaultRoute.test.ts b/tests/defaultRoute.test.ts
+index 4324266..324e96a 100644
+--- a/tests/defaultRoute.test.ts
++++ b/tests/defaultRoute.test.ts
+@@ -24,8 +24,8 @@ const componentName = (element: ReactElement | undefined) =>
+     ? (element.type as { name?: string }).name ?? ''
+     : String(element?.type);
+ 
+-describe('quota management window loads by default', () => {
+-  test('root and unknown routes redirect to /quota while dashboard stays reachable', async () => {
++describe('quota windows page loads by default', () => {
++  test('root and unknown routes redirect to /windows while dashboard stays reachable', async () => {
+     await import('../src/i18n/index');
+     const { createMainRoutes } = await import('../src/router/routeConfig');
+     const routes = createMainRoutes(false) as unknown as RouteEntry[];
+@@ -33,13 +33,14 @@ describe('quota management window loads by default', () => {
+ 
+     const root = elementFor('/');
+     expect(root?.type).toBe(Navigate);
+-    expect((root?.props as { to: string }).to).toBe('/quota');
++    expect((root?.props as { to: string }).to).toBe('/windows');
+ 
+     const fallback = elementFor('*');
+     expect(fallback?.type).toBe(Navigate);
+-    expect((fallback?.props as { to: string }).to).toBe('/quota');
++    expect((fallback?.props as { to: string }).to).toBe('/windows');
+ 
+     expect(componentName(elementFor('/quota'))).toBe('QuotaPage');
++    expect(componentName(elementFor('/windows'))).toBe('QuotaWindowsPage');
+     expect(componentName(elementFor('/dashboard'))).toBe('DashboardPage');
+ 
+     const pluginRoutes = createMainRoutes(true) as unknown as RouteEntry[];
+@@ -55,7 +56,7 @@ describe('quota management window loads by default', () => {
+     writeFileSync(
+       proofPath,
+       `<!doctype html><html><head><meta charset="utf-8"><title>CPAMC default route proof</title></head>` +
+-        `<body><h1>Default landing route: /quota (QuotaPage)</h1>` +
++        `<body><h1>Default landing route: /windows (QuotaWindowsPage)</h1>` +
+         `<table><tr><th>path</th><th>resolves to</th></tr>` +
+         routes
+           .map((route) => `<tr><td>${route.path}</td><td>${componentName(route.element)}</td></tr>`)

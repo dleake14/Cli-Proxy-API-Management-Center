@@ -27,6 +27,7 @@ import {
   IconSidebarProviders,
   IconSidebarQuickStart,
   IconSidebarQuota,
+  IconSidebarWindows,
   IconSidebarStore,
   IconSidebarSystem,
   IconChevronDown,
@@ -61,6 +62,7 @@ const sidebarIcons: Record<string, ReactNode> = {
   authFiles: <IconSidebarAuthFiles size={18} />,
   oauth: <IconSidebarOauth size={18} />,
   quota: <IconSidebarQuota size={18} />,
+  windows: <IconSidebarWindows size={18} />,
   plugins: <IconSidebarPlugins size={18} />,
   pluginStore: <IconSidebarStore size={18} />,
   config: <IconSidebarConfig size={18} />,
@@ -643,6 +645,12 @@ export function MainLayout() {
       id: 'observe',
       labelKey: 'nav_groups.observe',
       items: [
+        {
+          path: '/windows',
+          labelKey: 'nav.windows',
+          metaKey: 'nav_meta.windows',
+          icon: sidebarIcons.windows,
+        },
         {
           path: '/quota',
           labelKey: 'nav.quota_management',

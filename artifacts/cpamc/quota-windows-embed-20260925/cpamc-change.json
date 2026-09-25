@@ -1,0 +1,39 @@
+{
+  "job_id": "quota-windows-embed-20260925",
+  "root": "/home/david/forks/cpamc",
+  "scope": {
+    "must_cover": [
+      "route:/windows renders full-height iframe embedding usage server quota-windows page",
+      "nav entry Windows placed before Quota in Observe group",
+      "locale keys nav.windows and nav_meta.windows in en/ru/zh-CN/zh-TW",
+      "root and catch-all redirects changed from /quota to /windows",
+      "/quota route preserved unchanged",
+      "no credentials or provider keys added",
+      "preserve existing uncommitted QuotaTimeline changes"
+    ]
+  },
+  "files_changed": [
+    "src/pages/QuotaWindowsPage.tsx",
+    "src/pages/QuotaWindowsPage.module.scss",
+    "src/router/routeConfig.tsx",
+    "src/components/layout/MainLayout.tsx",
+    "src/components/ui/icons.tsx",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/ru.json",
+    "src/i18n/locales/zh-CN.json",
+    "src/i18n/locales/zh-TW.json",
+    "tests/defaultRoute.test.ts"
+  ],
+  "validation": {
+    "command": "bun run verify",
+    "log": "artifacts/cpamc/quota-windows-embed-20260925/validation.log",
+    "exit_code": 0,
+    "tests": "528 pass, 0 fail"
+  },
+  "dev_server_check": {
+    "command": "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/windows",
+    "result": "200"
+  },
+  "rollback": "git checkout -- src/pages/QuotaWindowsPage.tsx src/pages/QuotaWindowsPage.module.scss src/router/routeConfig.tsx src/components/layout/MainLayout.tsx src/components/ui/icons.tsx src/i18n/locales/en.json src/i18n/locales/ru.json src/i18n/locales/zh-CN.json src/i18n/locales/zh-TW.json tests/defaultRoute.test.ts && rm -f src/pages/QuotaWindowsPage.tsx src/pages/QuotaWindowsPage.module.scss",
+  "notes": "Pre-existing uncommitted changes to src/features/quota/components/QuotaTimeline.tsx and .module.scss were left untouched."
+}

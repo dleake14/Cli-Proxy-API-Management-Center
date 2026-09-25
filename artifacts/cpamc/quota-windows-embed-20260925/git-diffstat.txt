@@ -1,0 +1,11 @@
+ src/components/layout/MainLayout.tsx                 |  8 ++++++++
+ src/components/ui/icons.tsx                          | 10 ++++++++++
+ .../quota/components/QuotaTimeline.module.scss       | 11 +++++++++--
+ src/features/quota/components/QuotaTimeline.tsx      | 20 +++++++++++++++-----
+ src/i18n/locales/en.json                             |  2 ++
+ src/i18n/locales/ru.json                             |  2 ++
+ src/i18n/locales/zh-CN.json                          |  2 ++
+ src/i18n/locales/zh-TW.json                          |  2 ++
+ src/router/routeConfig.tsx                           |  6 ++++--
+ tests/defaultRoute.test.ts                           | 11 ++++++-----
+ 10 files changed, 60 insertions(+), 14 deletions(-)

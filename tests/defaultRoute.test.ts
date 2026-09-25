@@ -24,8 +24,8 @@ const componentName = (element: ReactElement | undefined) =>
     ? (element.type as { name?: string }).name ?? ''
     : String(element?.type);
 
-describe('quota management window loads by default', () => {
-  test('root and unknown routes redirect to /quota while dashboard stays reachable', async () => {
+describe('quota windows page loads by default', () => {
+  test('root and unknown routes redirect to /windows while dashboard stays reachable', async () => {
     await import('../src/i18n/index');
     const { createMainRoutes } = await import('../src/router/routeConfig');
     const routes = createMainRoutes(false) as unknown as RouteEntry[];
@@ -33,13 +33,14 @@ describe('quota management window loads by default', () => {
 
     const root = elementFor('/');
     expect(root?.type).toBe(Navigate);
-    expect((root?.props as { to: string }).to).toBe('/quota');
+    expect((root?.props as { to: string }).to).toBe('/windows');
 
     const fallback = elementFor('*');
     expect(fallback?.type).toBe(Navigate);
-    expect((fallback?.props as { to: string }).to).toBe('/quota');
+    expect((fallback?.props as { to: string }).to).toBe('/windows');
 
     expect(componentName(elementFor('/quota'))).toBe('QuotaPage');
+    expect(componentName(elementFor('/windows'))).toBe('QuotaWindowsPage');
     expect(componentName(elementFor('/dashboard'))).toBe('DashboardPage');
 
     const pluginRoutes = createMainRoutes(true) as unknown as RouteEntry[];
@@ -55,7 +56,7 @@ describe('quota management window loads by default', () => {
     writeFileSync(
       proofPath,
       `<!doctype html><html><head><meta charset="utf-8"><title>CPAMC default route proof</title></head>` +
-        `<body><h1>Default landing route: /quota (QuotaPage)</h1>` +
+        `<body><h1>Default landing route: /windows (QuotaWindowsPage)</h1>` +
         `<table><tr><th>path</th><th>resolves to</th></tr>` +
         routes
           .map((route) => `<tr><td>${route.path}</td><td>${componentName(route.element)}</td></tr>`)

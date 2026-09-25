@@ -489,6 +489,16 @@ export function IconSidebarQuota({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconSidebarWindows({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M9 21V9" />
+    </svg>
+  );
+}
+
 export const IconSidebarLogs = IconScrollText;
 
 export function IconSidebarSystem({ size = 20, ...props }: IconProps) {

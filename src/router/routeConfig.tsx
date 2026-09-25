@@ -6,6 +6,7 @@ import { AuthFilesOAuthExcludedEditPage } from '@/pages/AuthFilesOAuthExcludedEd
 import { AuthFilesOAuthModelAliasEditPage } from '@/pages/AuthFilesOAuthModelAliasEditPage';
 import { OAuthPage } from '@/pages/OAuthPage';
 import { QuotaPage } from '@/features/quota/QuotaPage';
+import { QuotaWindowsPage } from '@/pages/QuotaWindowsPage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
@@ -15,7 +16,7 @@ import { SystemPage } from '@/pages/SystemPage';
 
 export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
   [
-    { path: '/', element: <Navigate to="/quota" replace /> },
+    { path: '/', element: <Navigate to="/windows" replace /> },
     { path: '/dashboard', element: <DashboardPage /> },
     { path: '/settings', element: <Navigate to="/config" replace /> },
     { path: '/api-keys', element: <Navigate to="/config" replace /> },
@@ -27,6 +28,7 @@ export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
     { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
     { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
     { path: '/oauth', element: <OAuthPage /> },
+    { path: '/windows', element: <QuotaWindowsPage /> },
     { path: '/quota', element: <QuotaPage /> },
     ...(supportsPlugin
       ? [
@@ -43,5 +45,5 @@ export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
     { path: '/config', element: <ConfigPage /> },
     { path: '/logs', element: <LogsPage /> },
     { path: '/system', element: <SystemPage /> },
-    { path: '*', element: <Navigate to="/quota" replace /> },
+    { path: '*', element: <Navigate to="/windows" replace /> },
   ];

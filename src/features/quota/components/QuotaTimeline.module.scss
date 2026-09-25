@@ -190,7 +190,10 @@ $lane-width: 210px;
 .axis,
 .lane {
   display: grid;
-  grid-template-columns: $lane-width 1fr;
+  // minmax(0, 1fr): a bare 1fr has an automatic minimum, so date labels or
+  // bar text wider than their slot widened the axis row but not the lane rows,
+  // and the dates drifted off the bars.
+  grid-template-columns: $lane-width minmax(0, 1fr);
   min-width: var(--timeline-min-width, 960px);
 }
 
@@ -223,6 +226,7 @@ $lane-width: 210px;
 
 .axisCells {
   display: flex;
+  min-width: 0;
 }
 
 .axisCell {
@@ -232,6 +236,7 @@ $lane-width: 210px;
   flex-direction: column;
   align-items: center;
   gap: 1px;
+  overflow: hidden;
   padding: 6px 2px;
   border-left: 1px solid var(--border-color);
 
@@ -632,7 +637,9 @@ $lane-width: 210px;
 
   .axis,
   .lane {
-    min-width: 720px;
+    // Keep the zoom width; a fixed 720px here ignored zoom and made the axis
+    // label spacing disagree with the width actually drawn.
+    min-width: max(720px, var(--timeline-min-width, 720px));
   }
 }
 
