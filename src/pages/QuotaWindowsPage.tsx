@@ -27,7 +27,8 @@ async function probe(url: string): Promise<boolean> {
   }
 }
 
-type FrameState = { status: 'probing' } | { status: 'ready'; src: string } | { status: 'failed'; tried: string[] };
+type FrameState =
+  { status: 'probing' } | { status: 'ready'; src: string } | { status: 'failed'; tried: string[] };
 
 export function QuotaWindowsPage() {
   const [state, setState] = useState<FrameState>({ status: 'probing' });
@@ -36,18 +37,31 @@ export function QuotaWindowsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const candidates = [QUOTA_WINDOWS_PATH, portUrl()];
-      for (const url of candidates) {
-        if (await probe(url)) {
-          if (!cancelled) setState({ status: 'ready', src: url });
-          return;
+    let timer: number | undefined;
+    let checking = false;
+    let ready = false;
+    const check = async () => {
+      if (cancelled || checking) return;
+      checking = true;
+      try {
+        const candidates = [QUOTA_WINDOWS_PATH, portUrl()];
+        for (const url of candidates) {
+          if (await probe(url)) {
+            ready = true;
+            if (!cancelled) setState({ status: 'ready', src: url });
+            return;
+          }
         }
+        if (!cancelled) setState({ status: 'failed', tried: candidates });
+      } finally {
+        checking = false;
+        if (!cancelled && !ready) timer = window.setTimeout(check, 30_000);
       }
-      if (!cancelled) setState({ status: 'failed', tried: candidates });
-    })();
+    };
+    void check();
     return () => {
       cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 
@@ -65,9 +79,8 @@ export function QuotaWindowsPage() {
     return (
       <div className={styles.page}>
         <div className={styles.fallback} role="status">
-          Quota windows page is unreachable. Tried: {state.tried.join(' , ')}. If this device
-          runs a DNS filter or VPN, open {portUrl()} directly to see whether the page itself
-          loads.
+          Quota windows page is unreachable. Tried: {state.tried.join(' , ')}. If this device runs a
+          DNS filter or VPN, open {portUrl()} directly to see whether the page itself loads.
         </div>
       </div>
     );
@@ -77,8 +90,8 @@ export function QuotaWindowsPage() {
     <div className={styles.page}>
       {slow && !loaded ? (
         <div className={styles.fallback} role="status">
-          Still loading {state.src} after {LOAD_TIMEOUT_MS / 1000}s. The frame may be blocked
-          on this device.
+          Still loading {state.src} after {LOAD_TIMEOUT_MS / 1000}s. The frame may be blocked on
+          this device.
         </div>
       ) : null}
       <iframe

@@ -43,7 +43,6 @@ import {
   type QuotaFileEntry,
 } from './logic';
 import { nextRecoveryMs } from './resetSchedule';
-import { createQuotaRefreshController } from './quotaRefreshClock';
 import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers';
 import type { QuotaProviderType } from './providers/types';
 import { useQuotaActions } from './hooks/useQuotaActions';
@@ -92,6 +91,7 @@ export function QuotaPage() {
     try {
       const data = await authFilesApi.list();
       setFiles(data?.files || []);
+      useAuthStore.setState({ connectionStatus: 'connected' });
       setAuthFilesLoadFailed(false);
       setAuthFilesFailureCount(0);
     } catch (err: unknown) {
@@ -116,15 +116,19 @@ export function QuotaPage() {
   // list, so it cannot recover the list itself. Retry only actual failures;
   // a successful empty list is a valid steady state.
   useEffect(() => {
-    if (!authFilesLoadFailed || disableControls) return;
+    if (!authFilesLoadFailed) return;
     const delay = authFilesRetryDelayMs(authFilesFailureCount);
-    const timer = window.setTimeout(() => { void loadFiles(); }, delay);
+    const timer = window.setTimeout(() => {
+      void loadFiles();
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [authFilesFailureCount, authFilesLoadFailed, disableControls, loadFiles]);
 
   useEffect(() => {
-    if (!authFilesLoadFailed || disableControls) return;
-    const retryNow = () => { void loadFiles(); };
+    if (!authFilesLoadFailed) return;
+    const retryNow = () => {
+      void loadFiles();
+    };
     window.addEventListener('focus', retryNow);
     window.addEventListener('online', retryNow);
     return () => {
@@ -181,10 +185,7 @@ export function QuotaPage() {
     [entries, t]
   );
   // 泳道名 = 卡头标题，恒等查询同一张表（依赖稳定，进泳道 memo 依赖数组）。
-  const displayNameFor = useCallback(
-    (name: string) => cardLabels.get(name) ?? name,
-    [cardLabels]
-  );
+  const displayNameFor = useCallback((name: string) => cardLabels.get(name) ?? name, [cardLabels]);
 
   const resolveNextRecovery = useCallback(
     (entry: QuotaFileEntry) => nextRecoveryMs(entry.type, getQuota(entry), sortNow),
@@ -232,7 +233,7 @@ export function QuotaPage() {
 
   // 剪枝：文件列表落定后，各 provider 缓存只保留仍存在的凭证
   useEffect(() => {
-    if (loading) return;
+    if (loading || authFilesLoadFailed) return;
     const survivorsByType = new Map<QuotaProviderType, Set<string>>(
       QUOTA_TAB_ORDER.map((type) => [type, new Set<string>()])
     );
@@ -249,53 +250,15 @@ export function QuotaPage() {
         return next;
       });
     });
-  }, [entries, loading]);
+  }, [entries, loading, authFilesLoadFailed]);
 
   /* ---------- 加载与操作 ---------- */
 
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
   const { refreshQuota } = useQuotaActions(disableControls);
 
-  const autoRefreshState = useRef({ loading, disableControls, batchLoading, entries, loadQuota });
-  const autoRefreshController = useRef<ReturnType<typeof createQuotaRefreshController> | null>(null);
-
-  useEffect(() => {
-    autoRefreshState.current = { loading, disableControls, batchLoading, entries, loadQuota };
-    if (disableControls) autoRefreshController.current?.invalidate();
-    void autoRefreshController.current?.check();
-  }, [loading, disableControls, batchLoading, entries, loadQuota]);
-
-  useEffect(() => {
-    const controller = createQuotaRefreshController({
-      now: Date.now,
-      ready: () => {
-        const state = autoRefreshState.current;
-        return !state.loading && !state.disableControls && !state.batchLoading && state.entries.length > 0;
-      },
-      refresh: () => {
-        const state = autoRefreshState.current;
-        return state.loadQuota(state.entries, true);
-      },
-    });
-    autoRefreshController.current = controller;
-    const check = () => { void controller.check(); };
-    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
-    // Polling checks readiness; provider requests run at most once per
-    // randomized 3–7 minute deadline (re-rolled after each refresh, see
-    // quotaRefreshClock). Focus/online catch up immediately after suspension.
-    const timer = window.setInterval(check, 15_000);
-    window.addEventListener('focus', check);
-    window.addEventListener('online', check);
-    document.addEventListener('visibilitychange', onVisible);
-    check();
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', check);
-      window.removeEventListener('online', check);
-      document.removeEventListener('visibilitychange', onVisible);
-      autoRefreshController.current = null;
-    };
-  }, []);
+  // The authenticated shell owns automatic refresh for every provider.
+  // This route owns only explicit user actions, so navigation cannot stop polling.
 
   const pendingRefreshRef = useRef(false);
   const prevLoadingRef = useRef(loading);
@@ -463,7 +426,6 @@ export function QuotaPage() {
             </Button>
           </div>
         )}
-
       </section>
     </div>
   );

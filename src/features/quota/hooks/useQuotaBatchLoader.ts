@@ -68,8 +68,19 @@ export function useQuotaBatchLoader() {
 
             const results = await Promise.all(
               entries.map(async ({ file }): Promise<BatchFetchResult> => {
+                let timeout: ReturnType<typeof setTimeout> | undefined;
                 try {
-                  const data = await adapter.fetchQuota(file, t);
+                  // A hung sidecar must not hold the provider group forever.
+                  // Late fetch results cannot commit after this deadline wins.
+                  const data = await Promise.race([
+                    adapter.fetchQuota(file, t),
+                    new Promise<never>((_, reject) => {
+                      timeout = setTimeout(
+                        () => reject(new Error(t('notification.refresh_failed'))),
+                        45_000
+                      );
+                    }),
+                  ]);
                   return { name: file.name, status: 'success', data };
                 } catch (err: unknown) {
                   const message = err instanceof Error ? err.message : t('common.unknown_error');
@@ -79,6 +90,8 @@ export function useQuotaBatchLoader() {
                     error: message,
                     errorStatus: getStatusFromError(err),
                   };
+                } finally {
+                  if (timeout !== undefined) clearTimeout(timeout);
                 }
               })
             );
