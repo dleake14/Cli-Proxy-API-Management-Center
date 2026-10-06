@@ -6,6 +6,7 @@ import { AuthFilesOAuthExcludedEditPage } from '@/pages/AuthFilesOAuthExcludedEd
 import { AuthFilesOAuthModelAliasEditPage } from '@/pages/AuthFilesOAuthModelAliasEditPage';
 import { OAuthPage } from '@/pages/OAuthPage';
 import { QuotaPage } from '@/features/quota/QuotaPage';
+import { LedgerPage } from '@/pages/LedgerPage';
 import { QuotaWindowsPage } from '@/pages/QuotaWindowsPage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
@@ -14,36 +15,36 @@ import { ConfigPage } from '@/features/config/ConfigPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
 
-export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] =>
-  [
-    { path: '/', element: <Navigate to="/windows" replace /> },
-    { path: '/dashboard', element: <DashboardPage /> },
-    { path: '/settings', element: <Navigate to="/config" replace /> },
-    { path: '/api-keys', element: <Navigate to="/config" replace /> },
-    { path: '/quick-start', element: <ProvidersWorkbenchPage fixedBrand="apikeyFun" /> },
-    { path: '/quick-start/*', element: <Navigate to="/quick-start" replace /> },
-    { path: '/ai-providers', element: <ProvidersWorkbenchPage /> },
-    { path: '/ai-providers/*', element: <Navigate to="/ai-providers" replace /> },
-    { path: '/auth-files', element: <AuthFilesPage /> },
-    { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
-    { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
-    { path: '/oauth', element: <OAuthPage /> },
-    { path: '/windows', element: <QuotaWindowsPage /> },
-    { path: '/quota', element: <QuotaPage /> },
-    ...(supportsPlugin
-      ? [
-          { path: '/plugin-pages/:pluginId/:menuIndex', element: <PluginResourcePage /> },
-          { path: '/plugins', element: <PluginsPage /> },
-          { path: '/plugin-store', element: <PluginStorePage /> },
-          { path: '/plugins/*', element: <Navigate to="/plugins" replace /> },
-        ]
-      : [
-          { path: '/plugin-pages/*', element: <Navigate to="/" replace /> },
-          { path: '/plugins/*', element: <Navigate to="/" replace /> },
-          { path: '/plugin-store', element: <Navigate to="/" replace /> },
-        ]),
-    { path: '/config', element: <ConfigPage /> },
-    { path: '/logs', element: <LogsPage /> },
-    { path: '/system', element: <SystemPage /> },
-    { path: '*', element: <Navigate to="/windows" replace /> },
-  ];
+export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] => [
+  { path: '/', element: <Navigate to="/windows" replace /> },
+  { path: '/dashboard', element: <DashboardPage /> },
+  { path: '/settings', element: <Navigate to="/config" replace /> },
+  { path: '/api-keys', element: <Navigate to="/config" replace /> },
+  { path: '/quick-start', element: <ProvidersWorkbenchPage fixedBrand="apikeyFun" /> },
+  { path: '/quick-start/*', element: <Navigate to="/quick-start" replace /> },
+  { path: '/ai-providers', element: <ProvidersWorkbenchPage /> },
+  { path: '/ai-providers/*', element: <Navigate to="/ai-providers" replace /> },
+  { path: '/auth-files', element: <AuthFilesPage /> },
+  { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
+  { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
+  { path: '/oauth', element: <OAuthPage /> },
+  { path: '/windows', element: <QuotaWindowsPage /> },
+  { path: '/quota', element: <QuotaPage /> },
+  { path: '/ledger', element: <LedgerPage /> },
+  ...(supportsPlugin
+    ? [
+        { path: '/plugin-pages/:pluginId/:menuIndex', element: <PluginResourcePage /> },
+        { path: '/plugins', element: <PluginsPage /> },
+        { path: '/plugin-store', element: <PluginStorePage /> },
+        { path: '/plugins/*', element: <Navigate to="/plugins" replace /> },
+      ]
+    : [
+        { path: '/plugin-pages/*', element: <Navigate to="/" replace /> },
+        { path: '/plugins/*', element: <Navigate to="/" replace /> },
+        { path: '/plugin-store', element: <Navigate to="/" replace /> },
+      ]),
+  { path: '/config', element: <ConfigPage /> },
+  { path: '/logs', element: <LogsPage /> },
+  { path: '/system', element: <SystemPage /> },
+  { path: '*', element: <Navigate to="/windows" replace /> },
+];

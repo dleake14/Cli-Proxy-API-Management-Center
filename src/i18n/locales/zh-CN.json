@@ -107,7 +107,8 @@
     "plugin_store": "插件商店",
     "config_management": "配置面板",
     "logs": "日志查看",
-    "system_info": "中心信息"
+    "system_info": "中心信息",
+    "ledger": "用量账本"
   },
   "nav_groups": {
     "operate": "运行",
@@ -128,7 +129,8 @@
     "plugin_store": "发现并安装插件",
     "logs": "请求追踪与排查",
     "config_management": "网关基础配置",
-    "system_info": "运行与诊断信息"
+    "system_info": "运行与诊断信息",
+    "ledger": "每日令牌与模型占比"
   },
   "dashboard": {
     "hero_verdict_good": "运行平稳",
@@ -1774,5 +1776,43 @@
     "timeout": "Usage Ledger did not respond before the refresh deadline",
     "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "刷新"
+  },
+  "ledger": {
+    "view": "账本视图",
+    "dailyHistory": "每日历史",
+    "originalMix": "原版 Mix",
+    "openMix": "单独打开 Mix",
+    "mixConnection": "如果嵌入页面不可用，请单独打开 Mix 检查连接。",
+    "title": "用量账本",
+    "subtitle": "来自本地账本的每日用量和模型占比。",
+    "refresh": "刷新",
+    "error": "账本不可用。请检查 Usage 监视器和 CPAMC 服务。保留的数据可能已过时。",
+    "stale": "账本快照已超过 20 分钟。",
+    "updated": "快照更新于",
+    "loading": "正在加载账本…",
+    "empty": "暂无每日账本历史。",
+    "older": "更早",
+    "newer": "更新",
+    "yesterday": "昨天",
+    "day": "日期",
+    "partial": "进行中",
+    "tokens": "令牌",
+    "turns": "轮次",
+    "models": "模型数",
+    "cost": "估算 $",
+    "perTurn": "$/轮次",
+    "cache": "缓存命中",
+    "model": "模型",
+    "mix": "模型占比",
+    "history": "28 天历史",
+    "topModels": "按轮次排名前 3 个模型",
+    "noModels": "此日没有已记录的模型。",
+    "note": "日期采用 America/Chicago。令牌是账本记录的用量；缺失指标显示 —。占比基于已记录的模型总量。每个模型在各日期、图表和表格中保持相同颜色。估算金额为 API 标价等值，并非账单。订阅配额百分比见配额管理。",
+    "today": "今天",
+    "recentDays": "最近 10 天",
+    "cardMeasure": "卡片指标",
+    "cardDollars": "估算金额",
+    "topByTokens": "按令牌排名前 3 个模型",
+    "topByCost": "按估算金额排名前 3 个模型"
   }
 }

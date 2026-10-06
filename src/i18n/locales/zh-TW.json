@@ -107,7 +107,8 @@
     "plugin_store": "插件商店",
     "config_management": "設定面板",
     "logs": "記錄檢視",
-    "system_info": "中心資訊"
+    "system_info": "中心資訊",
+    "ledger": "用量帳本"
   },
   "nav_groups": {
     "operate": "運行",
@@ -128,7 +129,8 @@
     "plugin_store": "探索並安裝插件",
     "logs": "請求追蹤與排查",
     "config_management": "閘道基礎設定",
-    "system_info": "運行與診斷資訊"
+    "system_info": "運行與診斷資訊",
+    "ledger": "每日權杖與模型占比"
   },
   "dashboard": {
     "hero_verdict_good": "運行平穩",
@@ -1226,7 +1228,6 @@
     "windows_empty_session": "目前頁面沒有憑證提供 5 小時配額視窗。",
     "windows_now_pace": "{{label}} 按進度：剩餘 {{percent}}%",
     "windows_refresh": "重新整理",
-    "windows_now_pace": "{{label}} 按進度：剩餘 {{percent}}%",
     "windows_legend_current": "目前視窗",
     "windows_legend_upcoming": "即將開始",
     "windows_legend_elapsed": "已結束",
@@ -1801,5 +1802,43 @@
     "timeout": "Usage Ledger did not respond before the refresh deadline",
     "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "重新整理"
+  },
+  "ledger": {
+    "view": "帳本檢視",
+    "dailyHistory": "每日歷史",
+    "originalMix": "原版 Mix",
+    "openMix": "單獨開啟 Mix",
+    "mixConnection": "如果嵌入頁面無法使用，請單獨開啟 Mix 檢查連線。",
+    "title": "用量帳本",
+    "subtitle": "來自本地帳本的每日用量與模型占比。",
+    "refresh": "重新整理",
+    "error": "帳本無法使用。請檢查 Usage 監視器與 CPAMC 服務。保留的資料可能已過時。",
+    "stale": "帳本快照已超過 20 分鐘。",
+    "updated": "快照更新於",
+    "loading": "正在載入帳本…",
+    "empty": "暫無每日帳本歷史。",
+    "older": "更早",
+    "newer": "更新",
+    "yesterday": "昨天",
+    "day": "日期",
+    "partial": "進行中",
+    "tokens": "權杖",
+    "turns": "回合",
+    "models": "模型數",
+    "cost": "估算 $",
+    "perTurn": "$/回合",
+    "cache": "快取命中",
+    "model": "模型",
+    "mix": "模型占比",
+    "history": "28 天歷史",
+    "topModels": "按回合排名前 3 個模型",
+    "noModels": "此日沒有已記錄的模型。",
+    "note": "日期採用 America/Chicago。權杖是帳本記錄的用量；缺失指標顯示 —。占比以已記錄的模型總量計算。每個模型在各日期、圖表與表格中保持相同顏色。估算金額為 API 標價等值，並非帳單。訂閱配額百分比見配額管理。",
+    "today": "今天",
+    "recentDays": "最近 10 天",
+    "cardMeasure": "卡片指標",
+    "cardDollars": "估算金額",
+    "topByTokens": "按權杖排名前 3 個模型",
+    "topByCost": "按估算金額排名前 3 個模型"
   }
 }

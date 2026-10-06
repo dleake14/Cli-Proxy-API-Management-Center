@@ -659,6 +659,12 @@ export function MainLayout() {
           icon: sidebarIcons.quota,
         },
         {
+          path: '/ledger',
+          labelKey: 'nav.ledger',
+          metaKey: 'nav_meta.ledger',
+          icon: sidebarIcons.dashboard,
+        },
+        {
           path: '/logs',
           labelKey: 'nav.logs',
           metaKey: 'nav_meta.logs',

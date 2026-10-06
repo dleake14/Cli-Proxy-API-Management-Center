@@ -107,7 +107,8 @@
     "plugin_store": "Plugin Store",
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
-    "system_info": "Management Center Info"
+    "system_info": "Management Center Info",
+    "ledger": "Usage Ledger"
   },
   "nav_groups": {
     "operate": "Operate",
@@ -128,7 +129,8 @@
     "plugin_store": "Discover & install plugins",
     "logs": "Request tracing",
     "config_management": "Gateway configuration",
-    "system_info": "Runtime & diagnostics"
+    "system_info": "Runtime & diagnostics",
+    "ledger": "Daily tokens and model mix"
   },
   "dashboard": {
     "hero_verdict_good": "All systems steady",
@@ -1774,5 +1776,43 @@
     "timeout": "Usage Ledger did not respond before the refresh deadline",
     "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Refresh"
+  },
+  "ledger": {
+    "view": "Ledger view",
+    "dailyHistory": "Daily history",
+    "originalMix": "Original Mix",
+    "openMix": "Open Mix separately",
+    "mixConnection": "If the frame is unavailable, open Mix separately to check the connection.",
+    "title": "Usage Ledger",
+    "subtitle": "Daily usage and model mix from the local ledger.",
+    "refresh": "Refresh",
+    "error": "Ledger unavailable. Check that the Usage monitor and CPAMC service are running. Retained data may be stale.",
+    "stale": "This ledger snapshot is over 20 minutes old.",
+    "updated": "Snapshot updated",
+    "loading": "Loading ledger…",
+    "empty": "No daily ledger history is available.",
+    "older": "Older",
+    "newer": "Newer",
+    "yesterday": "Yesterday",
+    "day": "Day",
+    "partial": "In progress",
+    "tokens": "Tokens",
+    "turns": "Turns",
+    "models": "Models",
+    "cost": "Estimated $",
+    "perTurn": "$/turn",
+    "cache": "Cache hit",
+    "model": "Model",
+    "mix": "Model mix",
+    "history": "28-day history",
+    "topModels": "Top 3 models by turns",
+    "noModels": "No recorded models for this day.",
+    "note": "Days use America/Chicago. Tokens are recorded ledger usage; missing metrics show —. Mix shares use recorded model totals. Each model has a stable color across days, charts and tables. Estimated dollars are list-price equivalents, not invoices. Subscription quota percentages remain in Quota Management.",
+    "today": "Today",
+    "recentDays": "Last 10 days",
+    "cardMeasure": "Card measure",
+    "cardDollars": "Estimated dollars",
+    "topByTokens": "Top 3 models by tokens",
+    "topByCost": "Top 3 models by estimated $"
   }
 }
