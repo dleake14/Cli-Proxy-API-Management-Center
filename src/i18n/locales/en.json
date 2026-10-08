@@ -108,6 +108,7 @@
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
     "system_info": "Management Center Info",
+    "history": "History",
     "ledger": "Usage Ledger"
   },
   "nav_groups": {
@@ -130,6 +131,7 @@
     "logs": "Request tracing",
     "config_management": "Gateway configuration",
     "system_info": "Runtime & diagnostics",
+    "history": "All-time tokens",
     "ledger": "Daily tokens and model mix"
   },
   "dashboard": {
@@ -1776,6 +1778,10 @@
     "timeout": "Usage Ledger did not respond before the refresh deadline",
     "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Refresh"
+  },
+  "token_history": {
+    "loading": "Loading token history…",
+    "unavailable": "Token history unavailable. Retrying…"
   },
   "ledger": {
     "view": "Ledger view",

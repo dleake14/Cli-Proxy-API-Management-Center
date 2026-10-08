@@ -79,24 +79,32 @@ function isTrustedHost(host: string | undefined): boolean {
 
 // Keep the original Mix page and its polling on CPAMC's reachable port.
 // Only this page may be framed by CPAMC on the same hostname (dev or bundled).
+const frameableUsagePage: NonNullable<ProxyOptions['configure']> = (proxy) => {
+  proxy.on('proxyRes', (response, request) => {
+    const host = request.headers.host;
+    if (!isTrustedHost(host)) return;
+    const hostname = new URL(`http://${host}`).hostname;
+    delete response.headers['x-frame-options'];
+    response.headers['content-security-policy'] =
+      `frame-ancestors 'self' http://${hostname}:5173 http://${hostname}:8317`;
+  });
+};
+
 const usageMixProxy: Record<string, ProxyOptions> = {
   '/mix.html': {
     target: 'http://127.0.0.1:47193',
     changeOrigin: true,
-    configure(proxy) {
-      proxy.on('proxyRes', (response, request) => {
-        const host = request.headers.host;
-        if (!isTrustedHost(host)) return;
-        const hostname = new URL(`http://${host}`).hostname;
-        delete response.headers['x-frame-options'];
-        response.headers['content-security-policy'] =
-          `frame-ancestors 'self' http://${hostname}:5173 http://${hostname}:8317`;
-      });
-    },
+    configure: frameableUsagePage,
   },
   '/mix-seed.js': { target: 'http://127.0.0.1:47193', changeOrigin: true },
   '/live.json': { target: 'http://127.0.0.1:47193', changeOrigin: true },
   '/mix-hours': { target: 'http://127.0.0.1:47193', changeOrigin: true },
+  '^/token-history.*\\.html$': {
+    target: 'http://127.0.0.1:47193',
+    changeOrigin: true,
+    configure: frameableUsagePage,
+  },
+  '/token-history.json': { target: 'http://127.0.0.1:47193', changeOrigin: true },
 };
 
 // https://vitejs.dev/config/

@@ -108,6 +108,7 @@
     "config_management": "配置面板",
     "logs": "日志查看",
     "system_info": "中心信息",
+    "history": "History",
     "ledger": "用量账本"
   },
   "nav_groups": {
@@ -130,6 +131,7 @@
     "logs": "请求追踪与排查",
     "config_management": "网关基础配置",
     "system_info": "运行与诊断信息",
+    "history": "All-time tokens",
     "ledger": "每日令牌与模型占比"
   },
   "dashboard": {
@@ -1776,6 +1778,10 @@
     "timeout": "Usage Ledger did not respond before the refresh deadline",
     "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "刷新"
+  },
+  "token_history": {
+    "loading": "Loading token history…",
+    "unavailable": "Token history unavailable. Retrying…"
   },
   "ledger": {
     "view": "账本视图",

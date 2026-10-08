@@ -665,6 +665,12 @@ export function MainLayout() {
           icon: sidebarIcons.dashboard,
         },
         {
+          path: '/history',
+          labelKey: 'nav.history',
+          metaKey: 'nav_meta.history',
+          icon: sidebarIcons.dashboard,
+        },
+        {
           path: '/logs',
           labelKey: 'nav.logs',
           metaKey: 'nav_meta.logs',

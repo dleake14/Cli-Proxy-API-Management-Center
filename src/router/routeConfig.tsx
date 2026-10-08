@@ -7,6 +7,7 @@ import { AuthFilesOAuthModelAliasEditPage } from '@/pages/AuthFilesOAuthModelAli
 import { OAuthPage } from '@/pages/OAuthPage';
 import { QuotaPage } from '@/features/quota/QuotaPage';
 import { LedgerPage } from '@/pages/LedgerPage';
+import { TokenHistoryPage } from '@/pages/TokenHistoryPage';
 import { QuotaWindowsPage } from '@/pages/QuotaWindowsPage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
@@ -31,6 +32,7 @@ export const createMainRoutes = (supportsPlugin: boolean): RouteObject[] => [
   { path: '/windows', element: <QuotaWindowsPage /> },
   { path: '/quota', element: <QuotaPage /> },
   { path: '/ledger', element: <LedgerPage /> },
+  { path: '/history', element: <TokenHistoryPage /> },
   ...(supportsPlugin
     ? [
         { path: '/plugin-pages/:pluginId/:menuIndex', element: <PluginResourcePage /> },

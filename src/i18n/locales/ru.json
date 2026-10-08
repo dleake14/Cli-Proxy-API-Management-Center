@@ -108,6 +108,7 @@
     "config_management": "Панель конфигурации",
     "logs": "Просмотр логов",
     "system_info": "Информация системы",
+    "history": "History",
     "ledger": "Журнал использования"
   },
   "nav_groups": {
@@ -129,6 +130,7 @@
     "logs": "Трассировка запросов",
     "config_management": "Базовая конфигурация шлюза",
     "system_info": "Состояние и диагностика",
+    "history": "All-time tokens",
     "ledger": "Токены и модели по дням"
   },
   "dashboard": {
@@ -1754,6 +1756,10 @@
     "timeout": "Usage Ledger did not respond before the refresh deadline",
     "stale_data": "Usage data is stale; refresh will retry automatically",
     "refresh_button": "Обновить"
+  },
+  "token_history": {
+    "loading": "Loading token history…",
+    "unavailable": "Token history unavailable. Retrying…"
   },
   "ledger": {
     "view": "Вид журнала",
