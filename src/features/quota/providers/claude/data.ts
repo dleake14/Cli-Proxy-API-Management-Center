@@ -79,6 +79,23 @@ export const buildClaudeQuotaWindows = (
     });
   }
 
+  if (fableLimit && payload.iguana_necktie) {
+    const bucket = payload.iguana_necktie;
+    const usedPercent = normalizeNumberValue(bucket.utilization);
+    if (usedPercent !== null) {
+      windows.push({
+        id: 'provider-bucket-iguana-necktie',
+        label: t('claude_quota.iguana_necktie'),
+        labelKey: 'claude_quota.iguana_necktie',
+        usedPercent,
+        resetLabel: formatQuotaResetTime(bucket.resets_at ?? undefined),
+        resetAtMs: resolveResetMs([bucket.resets_at]),
+        // This API bucket has an expiry but declares no recurring window length.
+        periodHours: null,
+      });
+    }
+  }
+
   if (fableLimit) {
     const usedPercent = normalizeNumberValue(fableLimit.percent);
     if (usedPercent !== null) {

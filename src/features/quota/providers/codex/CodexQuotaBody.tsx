@@ -15,7 +15,6 @@ import {
   parseIsoToMs,
   resolveResetMs,
 } from '@/utils/quota';
-import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import { formatDateTimeValue } from '@/utils/format';
 import { useNow } from '@/hooks/useNow';
 import { QuotaMeter } from '../../components/QuotaMeter';
@@ -118,7 +117,7 @@ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaStat
       {rateLimitResetCredits.length > 0 ? (
         <div className={classes.codexResetCredits}>
           <div className={classes.codexResetCreditsTitle}>
-            {t('codex_quota.reset_credits_expiry_label', { timezone: resolveTimeZoneLabel() })}
+            {t('codex_quota.reset_credits_expiry_label', { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time' })}
           </div>
           {rateLimitResetCredits.map((credit, index) => {
             const expiresAtMs = parseIsoToMs(credit.expiresAt);

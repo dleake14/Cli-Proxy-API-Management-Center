@@ -1,9 +1,7 @@
 /**
- * Claude one-time free usage reset shown on claude.ai under "Resets"
- * ("Get extra wiggle room to explore Opus 5.5. Expires Oct 22." with a
- * "Reset for free" button). The OAuth usage API does not report it, so each
- * offer is an operator reading with its read timestamp. The visible card
- * keeps only the availability and expiry.
+ * One Claude manual free reset from the operator report. The OAuth usage API
+ * reports recurring quota windows but not this credit, so keep it separate.
+ * Date-only expiry uses an assumed end-of-day America/Chicago timestamp.
  */
 
 export type ClaudeResetOffer = {
@@ -14,20 +12,18 @@ export type ClaudeResetOffer = {
   expiresAtMs: number;
   /** How the offer was read, e.g. "operator reading". */
   method: string;
-  /** When the offer was read, America/Chicago. */
-  readAtLabel: string;
+  /** When the operator reported the offer, America/Chicago. */
+  recordedAtLabel: string;
 };
 
 export const CLAUDE_RESET_OFFERS: readonly ClaudeResetOffer[] = [
   {
-    id: 'opus-5-5-free-reset-2026-10-22',
-    // Operator dictated "October 1st 20 seconds" (= October twenty-second);
-    // the claude.ai panel screenshot reads "Expires Oct 22."
-    expiresLabel: 'October 22nd',
-    // 2026-10-22 23:59:59.999 CDT (UTC-5).
-    expiresAtMs: Date.UTC(2026, 9, 23, 5, 0) - 1,
-    method: 'operator reading',
-    readAtLabel: 'Sep 22 11:39 AM CT',
+    id: 'claude-manual-free-reset-2026-11-02',
+    expiresLabel: 'November 2nd',
+    // Next upcoming 2nd; 2026-11-02 23:59:59.999 CST (UTC-6), time assumed.
+    expiresAtMs: Date.UTC(2026, 10, 3, 6, 0) - 1,
+    method: 'operator report',
+    recordedAtLabel: 'Oct 15 2026 11:39 AM CT',
   },
 ];
 
