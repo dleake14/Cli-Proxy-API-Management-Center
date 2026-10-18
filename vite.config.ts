@@ -99,6 +99,7 @@ const usageMixProxy: Record<string, ProxyOptions> = {
   '/mix-seed.js': { target: 'http://127.0.0.1:47193', changeOrigin: true },
   '/live.json': { target: 'http://127.0.0.1:47193', changeOrigin: true },
   '/mix-hours': { target: 'http://127.0.0.1:47193', changeOrigin: true },
+  '/snapshot.json': { target: 'http://127.0.0.1:47193', changeOrigin: true },
   '^/token-history.*\\.html$': {
     target: 'http://127.0.0.1:47193',
     changeOrigin: true,
