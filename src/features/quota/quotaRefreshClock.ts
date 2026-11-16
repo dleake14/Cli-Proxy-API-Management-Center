@@ -11,15 +11,21 @@
  * it only issues a provider request when the randomized deadline is due.
  */
 
-/** Legacy fixed cadence, kept as the reference period for {@link quotaRefreshBucket}. */
-export const QUOTA_AUTO_REFRESH_MS = 5 * 60_000;
+/** Active hours: 06:00–23:59 Central. Overnight: one read per 30 minutes. */
+export const QUOTA_AUTO_REFRESH_MS = 2 * 60_000;
+export const QUOTA_REFRESH_MIN_MS = 2 * 60_000;
+export const QUOTA_REFRESH_MAX_MS = 3 * 60_000;
+const centralHour = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23',
+});
 
-/** Randomized auto-refresh window: no sooner than three, no later than seven minutes.
- * Increased from 2-8 min to reduce rate-limiting with rate-limited providers like Claude. */
-export const QUOTA_REFRESH_MIN_MS = 3 * 60_000;
-export const QUOTA_REFRESH_MAX_MS = 7 * 60_000;
+export function quotaRefreshIntervalMs(nowMs: number = Date.now()): number {
+  return Number(centralHour.format(new Date(nowMs))) < 6
+    ? 30 * 60_000
+    : QUOTA_AUTO_REFRESH_MS;
+}
 
-/** Stable key that changes every five minutes, including across midnight. */
+/** Stable key that changes every two minutes, including across midnight. */
 export function quotaRefreshBucket(nowMs: number): number {
   return Math.floor(nowMs / QUOTA_AUTO_REFRESH_MS);
 }

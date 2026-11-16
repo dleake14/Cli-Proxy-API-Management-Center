@@ -1820,5 +1820,9 @@
     "cardDollars": "Estimated dollars",
     "topByTokens": "Top 3 models by tokens",
     "topByCost": "Top 3 models by estimated $"
+  },
+  "quota_windows": {
+    "loading": "Loading quota windows…",
+    "reconnecting": "Quota data is temporarily unavailable. Reconnecting automatically…"
   }
 }

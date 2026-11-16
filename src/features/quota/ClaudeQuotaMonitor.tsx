@@ -7,11 +7,10 @@ import { getStatusFromError } from '@/utils/quota';
 import { classifyQuotaFiles } from './logic';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
 import { getQuotaMap, getQuotaSetter, QUOTA_ADAPTERS } from './providers';
-import { pickRefreshDelayMs } from './quotaRefreshClock';
+import { quotaRefreshIntervalMs } from './quotaRefreshClock';
 
 const HEALTH_INTERVAL_MS = 60_000;
 const RETRY_MS = 60_000;
-
 // Keep the existing export so the authenticated shell remains the owner.
 export function ClaudeQuotaMonitor() {
   const { t } = useTranslation();
@@ -27,6 +26,7 @@ export function ClaudeQuotaMonitor() {
     let inFlight = false;
     let nextHealthAt = 0;
     let lastClock = Date.now();
+    let lastCadence = quotaRefreshIntervalMs();
     let nextClaudeAt = 0;
     let nextOtherAt = 0;
     let lastEntries: ReturnType<typeof classifyQuotaFiles> = [];
@@ -45,13 +45,7 @@ export function ClaudeQuotaMonitor() {
         ({ type, file }) => getQuotaMap(QUOTA_ADAPTERS[type])[file.name]?.errorStatus === 429
       );
       // A provider throttle needs a cooldown, rather than a request every minute.
-      const delay = rateLimited
-        ? 15 * 60_000
-        : failed
-          ? RETRY_MS
-          : claude
-            ? pickRefreshDelayMs(Math.random, 10 * 60_000, 15 * 60_000)
-            : pickRefreshDelayMs(Math.random);
+      const delay = rateLimited ? 15 * 60_000 : failed ? quotaRefreshIntervalMs() === 30 * 60_000 ? 30 * 60_000 : RETRY_MS : quotaRefreshIntervalMs();
       if (claude) nextClaudeAt = Date.now() + delay;
       else nextOtherAt = Date.now() + delay;
     };
@@ -64,6 +58,13 @@ export function ClaudeQuotaMonitor() {
         nextOtherAt = 0;
       }
       lastClock = now;
+      const cadence = quotaRefreshIntervalMs(now);
+      if (cadence !== lastCadence) {
+        nextClaudeAt = Math.min(nextClaudeAt, now);
+        nextOtherAt = Math.min(nextOtherAt, now);
+        nextHealthAt = 0;
+        lastCadence = cadence;
+      }
       if (disposed || inFlight || now < nextHealthAt) return;
       inFlight = true;
       try {
@@ -109,7 +110,13 @@ export function ClaudeQuotaMonitor() {
         }
       } finally {
         inFlight = false;
-        nextHealthAt = Date.now() + HEALTH_INTERVAL_MS;
+        // Wake at the next refresh deadline when it falls inside the health interval,
+        // so the five-minute cadence is not stretched by the 60 s health poll.
+        const done = Date.now();
+        nextHealthAt = Math.max(
+          done + 5_000,
+          Math.min(done + HEALTH_INTERVAL_MS, nextClaudeAt, nextOtherAt)
+        );
       }
     };
 

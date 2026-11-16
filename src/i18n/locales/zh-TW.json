@@ -1846,5 +1846,9 @@
     "cardDollars": "估算金額",
     "topByTokens": "按權杖排名前 3 個模型",
     "topByCost": "按估算金額排名前 3 個模型"
+  },
+  "quota_windows": {
+    "loading": "正在載入配額視窗…",
+    "reconnecting": "配額資料暫時無法使用。正在自動重新連線…"
   }
 }

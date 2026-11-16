@@ -1820,5 +1820,9 @@
     "cardDollars": "估算金额",
     "topByTokens": "按令牌排名前 3 个模型",
     "topByCost": "按估算金额排名前 3 个模型"
+  },
+  "quota_windows": {
+    "loading": "正在加载配额窗口…",
+    "reconnecting": "配额数据暂时不可用。正在自动重新连接…"
   }
 }
